@@ -80,7 +80,7 @@ class VerificationController extends Controller
 
         return response()->json([
             'message' => implode(' ', $messages),
-            'user' => $user->fresh()->only(['id', 'email', 'phone', 'email_verified_at', 'phone_verified_at', 'verification_status'])
+            'user' => $user->fresh()->only(['id','role','email', 'phone', 'email_verified_at', 'registration_fee_status', 'verification_status'])
         ], $hasError ? 400 : 200);
     }
 }

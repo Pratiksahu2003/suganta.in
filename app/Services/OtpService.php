@@ -110,8 +110,8 @@ class OtpService
             $user->email_verified_at = now();
             $user->save();
         } elseif ($type === 'phone') {
-            // Assuming we have phone_verified_at or similar logic
-             $user->forceFill(['phone_verified_at' => now()])->save();
+             $user->email_verified_at = now();
+            $user->save();
         }
 
         return true;
