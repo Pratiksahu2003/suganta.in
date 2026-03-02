@@ -15,9 +15,6 @@ class RegistrationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        // Create roles
-        Role::create(['name' => 'student', 'label' => 'Student']);
-        Role::create(['name' => 'teacher', 'label' => 'Teacher']);
     }
 
     public function test_user_can_register()
