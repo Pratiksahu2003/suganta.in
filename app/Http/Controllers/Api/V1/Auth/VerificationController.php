@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Services\OtpService;
+use App\Traits\ApiResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class VerificationController extends Controller
 {
+    use ApiResponse;
+
     protected $otpService;
 
     public function __construct(OtpService $otpService)
@@ -19,7 +23,7 @@ class VerificationController extends Controller
     /**
      * Resend verification OTP
      */
-    public function resend(Request $request)
+    public function resend(Request $request): JsonResponse
     {
         $request->validate([
             'type' => 'required|in:email,phone',
@@ -29,7 +33,7 @@ class VerificationController extends Controller
         $type = $request->type;
 
         if ($type === 'email' && $user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified.'], 400);
+            return $this->error('Email already verified.', 400);
         }
 
         // Check phone verification status if needed
@@ -37,13 +41,13 @@ class VerificationController extends Controller
 
         $this->otpService->sendOtp($user, $type);
 
-        return response()->json(['message' => 'Verification code sent.']);
+        return $this->success('Verification code sent.');
     }
 
     /**
      * Verify OTP
      */
-    public function verify(Request $request)
+    public function verify(Request $request): JsonResponse
     {
         $request->validate([
             'email_otp' => 'nullable|string',
@@ -51,7 +55,7 @@ class VerificationController extends Controller
         ]);
 
         if (!$request->email_otp && !$request->phone_otp) {
-            return response()->json(['message' => 'Please provide email_otp or phone_otp.'], 422);
+            return $this->validationError(null, 'Please provide email_otp or phone_otp.');
         }
 
         $user = $request->user();
@@ -78,9 +82,16 @@ class VerificationController extends Controller
             }
         }
 
-        return response()->json([
-            'message' => implode(' ', $messages),
-            'user' => $user->fresh()->only(['id','role','email', 'phone', 'email_verified_at', 'registration_fee_status', 'verification_status'])
-        ], $hasError ? 400 : 200);
+        $message = implode(' ', $messages);
+        $userData = $user->fresh()->only(['id','role','email', 'phone', 'email_verified_at', 'registration_fee_status', 'verification_status']);
+
+        if ($hasError) {
+             // In case of error, we might still want to return user data for context?
+             // But error() puts data into 'errors'. 
+             // Ideally we just return error message.
+             return $this->error($message, 400, ['user' => $userData]);
+        }
+
+        return $this->success($message, ['user' => $userData]);
     }
 }

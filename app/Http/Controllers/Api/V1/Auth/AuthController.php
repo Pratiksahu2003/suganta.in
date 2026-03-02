@@ -8,12 +8,16 @@ use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Requests\Api\V1\Auth\RegisterRequest;
 use App\Http\Requests\Api\V1\Auth\ResetPasswordRequest;
 use App\Services\AuthService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
+    use ApiResponse;
+
     protected AuthService $authService;
 
     public function __construct(AuthService $authService)
@@ -29,18 +33,10 @@ class AuthController extends Controller
         try {
             $result = $this->authService->register($request->validated(), $request);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'User registered successfully',
-                'data' => $result
-            ], 201);
+            return $this->created($result, 'User registered successfully');
         } catch (\Exception $e) {
             Log::error('API Registration failed: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Registration failed. Please try again.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Registration failed. Please try again.', $e);
         }
     }
 
@@ -53,29 +49,63 @@ class AuthController extends Controller
             $result = $this->authService->login($request->validated(), $request);
 
             if (isset($result['requires_registration_payment']) && $result['requires_registration_payment']) {
-                return response()->json(array_merge([
-                    'success' => false,
-                ], $result), 200);
+                return $this->coreResponse(
+                    $result['message'] ?? 'Registration fee payment is required to complete login.',
+                    $result,
+                    200,
+                    false
+                );
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Login successful',
-                'data' => $result
-            ]);
+            if (isset($result['requires_otp']) && $result['requires_otp']) {
+                return $this->success($result['message'], $result);
+            }
+
+            return $this->success('Login successful', $result);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid credentials',
-                'errors' => $e->errors()
-            ], 422);
+            return $this->validationError($e->errors(), 'Invalid credentials');
         } catch (\Exception $e) {
             Log::error('API Login failed: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => $e->getCode() === 403 ? $e->getMessage() : 'Login failed. Please try again.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], $e->getCode() === 403 ? 403 : 500);
+            
+            $statusCode = $e->getCode();
+            // Ensure status code is valid HTTP status code
+            if ($statusCode < 100 || $statusCode > 599) {
+                $statusCode = 500;
+            }
+            
+            if ($statusCode === 403) {
+                return $this->forbidden($e->getMessage());
+            }
+            
+            return $this->serverError($e->getMessage() ?: 'Login failed. Please try again.', $e);
+        }
+    }
+
+    /**
+     * Verify Login OTP
+     */
+    public function verifyLogin(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'identifier' => 'required|string',
+            'otp' => 'required|string',
+            'remember_device' => 'nullable|boolean',
+            'device_name' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationError($validator->errors(), 'Verification failed');
+        }
+
+        try {
+            $result = $this->authService->verifyLogin($request->all(), $request);
+
+            return $this->success('Login successful', $result);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->validationError($e->errors(), 'Verification failed');
+        } catch (\Exception $e) {
+            Log::error('API Login Verification failed: ' . $e->getMessage());
+            return $this->serverError('Verification failed. Please try again.', $e);
         }
     }
 
@@ -87,16 +117,9 @@ class AuthController extends Controller
         try {
             $this->authService->logout($request->user());
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Logged out successfully'
-            ]);
+            return $this->success('Logged out successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logout failed',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Logout failed', $e);
         }
     }
 
@@ -108,16 +131,9 @@ class AuthController extends Controller
         try {
             $this->authService->logoutFromAllDevices($request->user());
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Logged out from all devices successfully'
-            ]);
+            return $this->success('Logged out from all devices successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logout failed',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Logout failed', $e);
         }
     }
 
@@ -129,20 +145,12 @@ class AuthController extends Controller
         try {
             $token = $this->authService->refreshToken($request->user());
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Token refreshed successfully',
-                'data' => [
-                    'token' => $token,
-                    'token_type' => 'Bearer'
-                ]
+            return $this->success('Token refreshed successfully', [
+                'token' => $token,
+                'token_type' => 'Bearer'
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Token refresh failed',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Token refresh failed', $e);
         }
     }
 
@@ -154,16 +162,9 @@ class AuthController extends Controller
         try {
             $this->authService->forgotPassword($request->validated()['email']);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'If an account with that email exists, a password reset link has been sent.'
-            ]);
+            return $this->success('If an account with that email exists, a password reset link has been sent.');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Password reset request failed. Please try again.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Password reset request failed. Please try again.', $e);
         }
     }
 
@@ -176,22 +177,12 @@ class AuthController extends Controller
             $status = $this->authService->resetPassword($request->validated());
 
             if ($status === \Illuminate\Support\Facades\Password::PASSWORD_RESET) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Password has been reset successfully. Please login with your new password.'
-                ]);
+                return $this->success('Password has been reset successfully. Please login with your new password.');
             } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid or expired reset token'
-                ], 400);
+                return $this->error('Invalid or expired reset token', 400);
             }
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Password reset failed. Please try again.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
+            return $this->serverError('Password reset failed. Please try again.', $e);
         }
     }
 }

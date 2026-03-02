@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\User;
 use App\Models\Role;
 use App\Models\Profile;
+use App\Services\InputDetectionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -20,19 +21,22 @@ class AuthService
     protected PasswordNotificationService $passwordNotificationService;
     protected RegistrationPaymentService $registrationPaymentService;
     protected OtpService $otpService;
+    protected InputDetectionService $inputDetectionService;
 
     public function __construct(
         SessionService $sessionService,
         UserActivityNotificationService $userActivityService,
         PasswordNotificationService $passwordNotificationService,
         RegistrationPaymentService $registrationPaymentService,
-        OtpService $otpService
+        OtpService $otpService,
+        InputDetectionService $inputDetectionService
     ) {
         $this->sessionService = $sessionService;
         $this->userActivityService = $userActivityService;
         $this->passwordNotificationService = $passwordNotificationService;
         $this->registrationPaymentService = $registrationPaymentService;
         $this->otpService = $otpService;
+        $this->inputDetectionService = $inputDetectionService;
     }
 
     /**
@@ -121,8 +125,25 @@ class AuthService
     public function login(array $credentials, Request $request): array
     {
         try {
-            if (!Auth::attempt(['email' => $credentials['email'], 'password' => $credentials['password']])) {
-                $user = User::where('email', $credentials['email'])->first();
+            $identifier = $credentials['email'];
+            $type = $this->inputDetectionService->detectType($identifier);
+
+            if (!$type) {
+                throw ValidationException::withMessages([
+                    'email' => ['Invalid email or phone number format'],
+                ]);
+            }
+
+            $user = null;
+            if ($type === 'email') {
+                $user = User::where('email', $identifier)->first();
+            } elseif ($type === 'phone') {
+                // Ensure phone format matches DB storage (assuming E.164 or normalized)
+                // For now, we try exact match or simplified match
+                $user = User::where('phone', $identifier)->first();
+            }
+
+            if (!$user || !Hash::check($credentials['password'], $user->password)) {
                 if ($user) {
                     $this->userActivityService->loginFailed($user, 'Invalid password via API');
                 }
@@ -130,8 +151,6 @@ class AuthService
                     'email' => ['Invalid credentials'],
                 ]);
             }
-
-            $user = Auth::user();
 
             if (!$user->is_active) {
                 throw new \Exception('Account is deactivated', 403);
@@ -164,6 +183,37 @@ class AuthService
                 }
             }
 
+            // Trusted Device Check
+            $deviceToken = $request->header('X-Device-Token');
+            $isTrusted = false;
+            if ($deviceToken) {
+                // Check cache for trusted device token
+                $cacheKey = 'trusted_device:' . $user->id . ':' . $deviceToken;
+                if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                    $isTrusted = true;
+                }
+            }
+
+            // If not trusted, require OTP (unless disabled via config, but requirement says "After password verification, trigger OTP")
+            if (!$isTrusted) {
+                // Send OTP
+                // Use detected type as preference, or fallback to email if phone not available
+                $otpType = $type;
+                if ($type === 'phone' && empty($user->phone)) {
+                    $otpType = 'email';
+                }
+                
+                $this->otpService->sendOtp($user, $otpType);
+
+                return [
+                    'requires_otp' => true,
+                    'identifier' => $identifier,
+                    'type' => $otpType, // Tell frontend which OTP to expect
+                    'message' => "OTP sent to your {$otpType}. Please verify to complete login."
+                ];
+            }
+
+            // If Trusted, proceed to login
             $deviceName = $credentials['device_name'] ?? $request->ip();
             $token = $user->createToken($deviceName)->plainTextToken;
 
@@ -172,7 +222,7 @@ class AuthService
             $this->checkNewDevice($user);
 
             $this->userActivityService->loginSuccessful($user, [
-                'login_method' => 'api_email_password',
+                'login_method' => 'api_email_password_trusted',
                 'device_name' => $deviceName
             ]);
 
@@ -197,6 +247,79 @@ class AuthService
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Verify Login OTP and issue token
+     */
+    public function verifyLogin(array $data, Request $request): array
+    {
+        $identifier = $data['identifier'];
+        $otp = $data['otp'];
+        $type = $this->inputDetectionService->detectType($identifier);
+
+        if (!$type) {
+             throw ValidationException::withMessages([
+                'identifier' => ['Invalid identifier format'],
+            ]);
+        }
+
+        $user = null;
+        if ($type === 'email') {
+            $user = User::where('email', $identifier)->first();
+        } elseif ($type === 'phone') {
+            $user = User::where('phone', $identifier)->first();
+        }
+
+        if (!$user) {
+             throw ValidationException::withMessages([
+                'identifier' => ['User not found'],
+            ]);
+        }
+
+        // Verify OTP
+        // Note: verifyOtp checks expiry, usage, and increments attempts
+        if (!$this->otpService->verifyOtp($user, $otp, $type)) {
+             throw ValidationException::withMessages([
+                'otp' => ['Invalid or expired OTP'],
+            ]);
+        }
+
+        // Login Successful
+        $deviceName = $data['device_name'] ?? $request->ip();
+        $token = $user->createToken($deviceName)->plainTextToken;
+
+        $this->sessionService->createSession($user, $request);
+        $this->checkUnusualLoginLocation($user);
+        $this->checkNewDevice($user);
+
+        // Handle Remember Device
+        $deviceToken = null;
+        if (!empty($data['remember_device'])) {
+            $deviceToken = \Illuminate\Support\Str::random(64);
+            $cacheKey = 'trusted_device:' . $user->id . ':' . $deviceToken;
+            // Store for 30 days
+            \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addDays(30));
+        }
+
+        $this->userActivityService->loginSuccessful($user, [
+            'login_method' => 'api_otp_verification',
+            'device_name' => $deviceName
+        ]);
+
+        $responseData = [
+            'success' => true,
+            'message' => 'Login successful',
+            'user' => $user->only(['id', 'name', 'email', 'role']),
+            'token' => $token,
+            'token_type' => 'Bearer',
+        ];
+
+        if ($deviceToken) {
+            $responseData['device_token'] = $deviceToken;
+        }
+
+        return $responseData;
     }
 
     /**

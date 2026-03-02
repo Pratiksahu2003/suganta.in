@@ -16,11 +16,15 @@ class Otp extends Model
         'otp',
         'expires_at',
         'verified',
+        'is_used',
+        'attempt_count',
     ];
 
     protected $casts = [
         'expires_at' => 'datetime',
         'verified' => 'boolean',
+        'is_used' => 'boolean',
+        'attempt_count' => 'integer',
     ];
 
     public function user()

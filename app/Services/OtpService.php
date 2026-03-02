@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class OtpService
@@ -27,10 +28,10 @@ class OtpService
     {
         $identifier = $type === 'email' ? $user->email : $user->phone;
         
-        // Rate Limiting: 3 requests per 4 hours (14400 seconds)
+        // Rate Limiting: 3 requests per 15 minutes (900 seconds)
         $key = 'otp_request:' . $identifier;
         $maxAttempts = 3;
-        $decaySeconds = 14400;
+        $decaySeconds = 900; // 15 minutes
 
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($key);
@@ -44,8 +45,11 @@ class OtpService
             ]);
         }
 
-        // Cooldown: 120 seconds between requests
+        // Progressive Cooldown
+        // Get current attempts in the main window to determine cooldown for THIS request
+        $attempts = RateLimiter::attempts($key);
         $cooldownKey = 'otp_cooldown:' . $identifier;
+        
         if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
             $seconds = RateLimiter::availableIn($cooldownKey);
             
@@ -54,16 +58,27 @@ class OtpService
             ]);
         }
 
+        // Determine next cooldown duration based on attempts made so far
+        // 1st request (attempts=0) -> next wait 30s
+        // 2nd request (attempts=1) -> next wait 2m (120s)
+        // 3rd request (attempts=2) -> next wait 5m (300s)
+        $nextCooldown = match($attempts) {
+            0 => 30,
+            1 => 120,
+            2 => 300,
+            default => 300
+        };
+
         RateLimiter::hit($key, $decaySeconds);
-        RateLimiter::hit($cooldownKey, 120);
+        RateLimiter::hit($cooldownKey, $nextCooldown);
 
         // Invalidate previous OTPs
         Otp::where('identifier', $identifier)
             ->where('type', $type)
             ->update(['is_used' => true]); // Mark as used/invalid
 
-        // Generate 6 digit OTP
-        $otpCode = (string) rand(100000, 999999);
+        // Generate 6 digit secure OTP
+        $otpCode = (string) random_int(100000, 999999);
         
         // For testing/local, we can log it
         if (config('app.env') !== 'production') {
@@ -71,11 +86,13 @@ class OtpService
         }
 
         Otp::create([
-            'identifier' => $type === 'email' ? $user->email : $user->phone,
+            'identifier' => $identifier,
             'type' => $type,
             'otp' => Hash::make($otpCode),
-            'expires_at' => Carbon::now()->addMinutes(10),
+            'expires_at' => Carbon::now()->addMinutes(5), // 5 minutes validity
             'is_used' => false,
+            'attempt_count' => 0,
+            'user_id' => $user->id,
         ]);
 
         if ($type === 'email') {
@@ -98,19 +115,39 @@ class OtpService
             ->latest()
             ->first();
 
-        if (!$otpRecord || !Hash::check($otpCode, $otpRecord->otp)) {
+        if (!$otpRecord) {
+            return false;
+        }
+
+        // Check for max attempts (Lockout after 5 tries)
+        if ($otpRecord->attempt_count >= 5) {
+             // Invalidate OTP immediately if max attempts reached
+             $otpRecord->update(['is_used' => true]);
+             Log::warning("OTP max attempts reached for {$identifier}");
+             return false;
+        }
+
+        if (!Hash::check($otpCode, $otpRecord->otp)) {
+            $otpRecord->increment('attempt_count');
             return false;
         }
 
         // Mark as verified
-        $otpRecord->update(['is_used' => true]);
+        $otpRecord->update(['is_used' => true, 'verified' => true]);
         
         // Update user verification status
         if ($type === 'email') {
             $user->email_verified_at = now();
             $user->save();
         } elseif ($type === 'phone') {
-             $user->email_verified_at = now();
+             // Assuming phone_verified_at exists or using email_verified_at as per original code
+             // Original code used email_verified_at for phone too, preserving that behavior but should probably be phone_verified_at if column exists
+             // I will use forceFill to be safe or check if property exists
+             if (\Schema::hasColumn('users', 'phone_verified_at')) {
+                 $user->phone_verified_at = now();
+             } else {
+                 $user->email_verified_at = now();
+             }
             $user->save();
         }
 
