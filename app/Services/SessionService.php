@@ -219,12 +219,13 @@ class SessionService
 
         try {
             // Use ipapi.co for location data (free tier available)
-            $response = Http::timeout(5)->get("http://ip-api.com/json/{$ipAddress}");
+            // Reduced timeout to 2 seconds to prevent long waits
+            $response = Http::timeout(2)->get("http://ip-api.com/json/{$ipAddress}");
             
             if ($response->successful()) {
                 $data = $response->json();
                 
-                if ($data['status'] === 'success') {
+                if (($data['status'] ?? 'fail') === 'success') {
                     return [
                         'location' => implode(', ', array_filter([
                             $data['city'] ?? null,
@@ -242,7 +243,10 @@ class SessionService
             }
         } catch (\Exception $e) {
             // Log error but don't fail
-            Log::warning('Failed to get location for IP: ' . $ipAddress, ['error' => $e->getMessage()]);
+            // Only log in debug mode to avoid cluttering production logs with timeout errors
+            if (config('app.debug')) {
+                Log::warning('Failed to get location for IP: ' . $ipAddress, ['error' => $e->getMessage()]);
+            }
         }
 
         return [

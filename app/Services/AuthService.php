@@ -8,6 +8,7 @@ use App\Models\Profile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
@@ -39,61 +40,76 @@ class AuthService
      */
     public function register(array $data, Request $request): array
     {
-        try {
-            // Create the user
-            $user = User::create([
-                'name' => $data['first_name'] . ' ' . $data['last_name'],
-                'email' => $data['email'],
-                'password' => Hash::make($data['password']),
-                'role' => $data['role'],
-                'phone' => $data['phone'] ?? null,
-                'is_active' => true,
-                'verification_status' => 'pending',
-                'referred_by' => $data['referral_code'] ?? null,
-                'preferences' => [
+        return DB::transaction(function () use ($data, $request) {
+            try {
+                // Create the user
+                $user = User::create([
+                    'name' => $data['first_name'] . ' ' . $data['last_name'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($data['password']),
+                    'role' => $data['role'],
+                    'phone' => $data['phone'] ?? null,
+                    'is_active' => true,
+                    'verification_status' => 'pending',
+                    'referred_by' => $data['referral_code'] ?? null,
+                    'preferences' => [
+                        'first_name' => $data['first_name'],
+                        'last_name' => $data['last_name'],
+                    ],
+                ]);
+
+                // Assign role
+                $this->assignUserRole($user, $data['role']);
+
+                // Create token
+                $deviceName = $data['device_name'] ?? ($request->userAgent() ?? 'Unknown Device');
+                $token = $user->createToken($deviceName)->plainTextToken;
+
+                // Create Profile
+                Profile::create([
+                    'user_id' => $user->id,
                     'first_name' => $data['first_name'],
                     'last_name' => $data['last_name'],
-                ],
-            ]);
+                    'display_name' => $data['first_name'] . ' ' . $data['last_name'],
+                ]);
 
-            // Assign role
-            $this->assignUserRole($user, $data['role']);
+                // Create session record (Fail gracefully if session creation fails)
+                try {
+                    $this->sessionService->createSession($user, $request);
+                } catch (\Exception $e) {
+                    Log::error('Session creation failed during registration: ' . $e->getMessage());
+                    // We continue even if session creation fails, as it's not critical for account creation
+                }
 
-            // Create token
-            $deviceName = $data['device_name'] ?? ($request->userAgent() ?? 'Unknown Device');
-            $token = $user->createToken($deviceName)->plainTextToken;
+                // Send registration notification (Fail gracefully)
+                try {
+                    $this->userActivityService->loginSuccessful($user, [
+                        'login_method' => 'api_registration'
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Activity logging failed during registration: ' . $e->getMessage());
+                }
 
-            // Create Profile
-            Profile::create([
-                'user_id' => $user->id,
-                'first_name' => $data['first_name'],
-                'last_name' => $data['last_name'],
-                'display_name' => $data['first_name'] . ' ' . $data['last_name'],
-            ]);
+                // Send OTP (Fail gracefully but log error)
+                try {
+                    $this->otpService->sendOtp($user, 'email');
+                } catch (\Exception $e) {
+                    Log::error('OTP sending failed during registration: ' . $e->getMessage());
+                }
 
-            // Create session record
-            $this->sessionService->createSession($user, $request);
-
-            // Send registration notification
-            $this->userActivityService->loginSuccessful($user, [
-                'login_method' => 'api_registration'
-            ]);
-
-            // Send OTP
-            $this->otpService->sendOtp($user, 'email');
-
-            return [
-                'user' => $user->only(['id', 'name', 'email', 'role']),
-                'token' => $token,
-                'token_type' => 'Bearer'
-            ];
-        } catch (\Exception $e) {
-            Log::error('AuthService Registration failed: ' . $e->getMessage(), [
-                'email' => $data['email'] ?? 'unknown',
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
+                return [
+                    'user' => $user->only(['id', 'name', 'email', 'role']),
+                    'token' => $token,
+                    'token_type' => 'Bearer'
+                ];
+            } catch (\Exception $e) {
+                Log::error('AuthService Registration failed: ' . $e->getMessage(), [
+                    'email' => $data['email'] ?? 'unknown',
+                    'trace' => $e->getTraceAsString()
+                ]);
+                throw $e; // Transaction will rollback
+            }
+        });
     }
 
     /**
