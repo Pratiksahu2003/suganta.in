@@ -94,6 +94,11 @@ Then use `auth:sanctum` middleware on protected routes and add `HasApiTokens` to
 
 API routes use the default `api` throttle (e.g. 60 requests per minute). Configure in `config/api.php` (`API_RATE_LIMIT`) or in `bootstrap/app.php` if you need a custom limiter.
 
+## API Documentation
+
+- [Option API](docs/OptionApi.md)
+- [Registration API](docs/RegistrationApi.md)
+
 ## License
 
 MIT.

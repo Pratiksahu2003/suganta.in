@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\OptionController;
+use App\Http\Controllers\Api\V1\RegistrationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,4 +17,5 @@ use App\Http\Controllers\Api\V1\OptionController;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('options', [OptionController::class, 'index']);
+    Route::get('registration/charges', [RegistrationController::class, 'charges']);
 });
