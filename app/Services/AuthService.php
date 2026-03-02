@@ -93,6 +93,9 @@ class AuthService
                 // Send OTP (Fail gracefully but log error)
                 try {
                     $this->otpService->sendOtp($user, 'email');
+                    if ($user->phone) {
+                        $this->otpService->sendOtp($user, 'phone');
+                    }
                 } catch (\Exception $e) {
                     Log::error('OTP sending failed during registration: ' . $e->getMessage());
                 }
@@ -173,11 +176,20 @@ class AuthService
                 'device_name' => $deviceName
             ]);
 
-            return [
+            $responseData = [
                 'user' => $user->only(['id', 'name', 'email', 'role']),
+                'email_verified_at' => $user->email_verified_at,
+                'registration_fee_status' => in_array($user->registration_fee_status, ['paid', 'not_required']),
                 'token' => $token,
                 'token_type' => 'Bearer'
             ];
+
+            // Add phone_verified_at if it exists
+            if ($user->phone) {
+                $responseData['phone_verified_at'] = $user->phone_verified_at ?? null;
+            }
+
+            return $responseData;
         } catch (\Exception $e) {
             Log::error('AuthService Login failed: ' . $e->getMessage(), [
                 'email' => $credentials['email'] ?? 'unknown',

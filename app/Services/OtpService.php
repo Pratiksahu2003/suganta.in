@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class OtpService
@@ -24,6 +25,38 @@ class OtpService
      */
     public function sendOtp(User $user, string $type = 'email'): void
     {
+        $identifier = $type === 'email' ? $user->email : $user->phone;
+        
+        // Rate Limiting: 3 requests per 4 hours (14400 seconds)
+        $key = 'otp_request:' . $identifier;
+        $maxAttempts = 3;
+        $decaySeconds = 14400;
+
+        if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+            $seconds = RateLimiter::availableIn($key);
+            $waitDuration = gmdate("H:i:s", $seconds);
+            
+            // Log the rate limit hit
+            Log::warning("OTP rate limit exceeded for {$identifier}. blocked for {$seconds}s");
+
+            abort(429, "Too many OTP requests. Please try again in {$waitDuration}.", [
+                'Retry-After' => $seconds
+            ]);
+        }
+
+        // Cooldown: 120 seconds between requests
+        $cooldownKey = 'otp_cooldown:' . $identifier;
+        if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
+            $seconds = RateLimiter::availableIn($cooldownKey);
+            
+            abort(429, "Please wait {$seconds} seconds before requesting another OTP.", [
+                'Retry-After' => $seconds
+            ]);
+        }
+
+        RateLimiter::hit($key, $decaySeconds);
+        RateLimiter::hit($cooldownKey, 120);
+
         // Invalidate previous OTPs
         Otp::where('user_id', $user->id)
             ->where('type', $type)
@@ -86,10 +119,12 @@ class OtpService
 
     protected function sendEmailOtp(User $user, string $otp)
     {
-        // Simple raw email for now to avoid creating Mailable class complexity if not needed
-        // Or use the existing notification service if it supports OTP
         try {
-             Mail::raw("Your OTP is: {$otp}. It expires in 10 minutes.", function ($message) use ($user) {
+            Mail::send('emails.otp', [
+                'otp' => $otp,
+                'type' => 'email_verification',
+                'notifiable' => $user
+            ], function ($message) use ($user) {
                 $message->to($user->email)
                     ->subject('Your Verification Code');
             });
