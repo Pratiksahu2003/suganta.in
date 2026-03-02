@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\OptionController;
 use App\Http\Controllers\Api\V1\RegistrationController;
+use App\Http\Controllers\Api\V1\Auth\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,6 +17,21 @@ use App\Http\Controllers\Api\V1\RegistrationController;
 */
 
 Route::prefix('v1')->group(function (): void {
+    // Auth Routes
+    Route::controller(AuthController::class)->prefix('auth')->group(function () {
+        Route::post('register', 'register');
+        Route::post('login', 'login');
+        Route::post('forgot-password', 'forgotPassword');
+        Route::post('reset-password', 'resetPassword');
+        
+        // Protected Routes
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::post('logout', 'logout');
+            Route::post('logout-all', 'logoutFromAllDevices');
+            Route::post('refresh-token', 'refreshToken');
+        });
+    });
+
     Route::get('options', [OptionController::class, 'index']);
     Route::get('registration/charges', [RegistrationController::class, 'charges']);
 });
