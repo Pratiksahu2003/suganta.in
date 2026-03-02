@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\OptionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,5 +15,5 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('v1')->group(function (): void {
-    // Add your API routes here
+    Route::get('options', [OptionController::class, 'index']);
 });
