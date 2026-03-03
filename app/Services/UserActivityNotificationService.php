@@ -24,7 +24,7 @@ class UserActivityNotificationService
     /**
      * Profile updated notification
      */
-    public function profileUpdated(User $user, $changes = [])
+    public function profileUpdated(User $user, array $changes = []): void
     {
         $changeMessages = [];
         foreach ($changes as $field => $value) {
@@ -75,7 +75,7 @@ class UserActivityNotificationService
     /**
      * Password changed notification
      */
-    public function passwordChanged(User $user, $additionalInfo = [])
+    public function passwordChanged(User $user, array $additionalInfo = []): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -97,7 +97,7 @@ class UserActivityNotificationService
     /**
      * Password reset notification
      */
-    public function passwordReset(User $user, $additionalInfo = [])
+    public function passwordReset(User $user, array $additionalInfo = []): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -119,7 +119,7 @@ class UserActivityNotificationService
     /**
      * Account verification notification
      */
-    public function accountVerified(User $user)
+    public function accountVerified(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -144,7 +144,7 @@ class UserActivityNotificationService
     /**
      * Successful login notification
      */
-    public function loginSuccessful(User $user, $additionalInfo = [])
+    public function loginSuccessful(User $user, array $additionalInfo = []): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -167,7 +167,7 @@ class UserActivityNotificationService
     /**
      * Failed login attempt notification
      */
-    public function loginFailed(User $user, $reason = 'Invalid credentials')
+    public function loginFailed(User $user, string $reason = 'Invalid credentials'): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -190,7 +190,7 @@ class UserActivityNotificationService
     /**
      * Unusual login location notification
      */
-    public function unusualLoginLocation(User $user, $location)
+    public function unusualLoginLocation(User $user, string $location): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -213,7 +213,7 @@ class UserActivityNotificationService
     /**
      * New device login notification
      */
-    public function newDeviceLogin(User $user, $deviceInfo)
+    public function newDeviceLogin(User $user, string $deviceInfo): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -240,7 +240,7 @@ class UserActivityNotificationService
     /**
      * Logout notification
      */
-    public function logout(User $user)
+    public function logout(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -266,7 +266,7 @@ class UserActivityNotificationService
     /**
      * Two-factor authentication enabled
      */
-    public function twoFactorEnabled(User $user)
+    public function twoFactorEnabled(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -287,7 +287,7 @@ class UserActivityNotificationService
     /**
      * Two-factor authentication disabled
      */
-    public function twoFactorDisabled(User $user)
+    public function twoFactorDisabled(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -308,7 +308,7 @@ class UserActivityNotificationService
     /**
      * Account locked notification
      */
-    public function accountLocked(User $user, $reason = 'Multiple failed login attempts')
+    public function accountLocked(User $user, string $reason = 'Multiple failed login attempts'): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -330,7 +330,7 @@ class UserActivityNotificationService
     /**
      * Account unlocked notification
      */
-    public function accountUnlocked(User $user)
+    public function accountUnlocked(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -355,7 +355,7 @@ class UserActivityNotificationService
     /**
      * Email changed notification
      */
-    public function emailChanged(User $user, $oldEmail, $newEmail)
+    public function emailChanged(User $user, string $oldEmail, string $newEmail): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -378,7 +378,7 @@ class UserActivityNotificationService
     /**
      * Email verification sent
      */
-    public function emailVerificationSent(User $user)
+    public function emailVerificationSent(User $user): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -402,7 +402,7 @@ class UserActivityNotificationService
     /**
      * Notification preferences updated
      */
-    public function notificationPreferencesUpdated(User $user, $changes = [])
+    public function notificationPreferencesUpdated(User $user, array $changes = []): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -422,7 +422,7 @@ class UserActivityNotificationService
     /**
      * Privacy settings updated
      */
-    public function privacySettingsUpdated(User $user, $changes = [])
+    public function privacySettingsUpdated(User $user, array $changes = []): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -446,7 +446,7 @@ class UserActivityNotificationService
     /**
      * Subscription started
      */
-    public function subscriptionStarted(User $user, $planName, $amount)
+    public function subscriptionStarted(User $user, string $planName, $amount): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -467,7 +467,7 @@ class UserActivityNotificationService
     /**
      * Subscription cancelled
      */
-    public function subscriptionCancelled(User $user, $planName, $endDate)
+    public function subscriptionCancelled(User $user, string $planName, $endDate): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -488,7 +488,7 @@ class UserActivityNotificationService
     /**
      * Subscription renewed
      */
-    public function subscriptionRenewed(User $user, $planName, $amount)
+    public function subscriptionRenewed(User $user, string $planName, $amount): void
     {
         $this->notificationService->createUserNotification(
             $user->id,
@@ -513,7 +513,7 @@ class UserActivityNotificationService
     /**
      * Get location from IP address (simplified)
      */
-    private function getLocationFromIP($ip)
+    private function getLocationFromIP(string $ip): string
     {
         // This is a simplified version. In production, you might want to use a service like MaxMind
         if ($ip === '127.0.0.1' || $ip === '::1') {
@@ -527,7 +527,7 @@ class UserActivityNotificationService
     /**
      * Get device type from user agent
      */
-    private function getDeviceType($userAgent)
+    private function getDeviceType(string $userAgent): string
     {
         if (preg_match('/Mobile|Android|iPhone|iPad/', $userAgent)) {
             return 'Mobile';
@@ -541,7 +541,7 @@ class UserActivityNotificationService
     /**
      * Get session duration (simplified)
      */
-    private function getSessionDuration()
+    private function getSessionDuration(): string
     {
         // This would need to be implemented based on your session management
         return 'Unknown';
@@ -550,7 +550,7 @@ class UserActivityNotificationService
     /**
      * Get user notification statistics
      */
-    public function getUserActivityStats(User $user)
+    public function getUserActivityStats(User $user): array
     {
         return [
             'total_activities' => Notification::where('notifiable_type', User::class)
@@ -578,7 +578,7 @@ class UserActivityNotificationService
     /**
      * Clean up old user activity notifications
      */
-    public function cleanupOldUserActivities($days = 90)
+    public function cleanupOldUserActivities(int $days = 90): int
     {
         $cutoffDate = now()->subDays($days);
         

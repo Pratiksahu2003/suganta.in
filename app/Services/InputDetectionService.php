@@ -48,9 +48,8 @@ class InputDetectionService
      */
     public function isValidPhone(string $phone): bool
     {
-        // E.164 regex: ^\+[1-9]\d{1,14}$
-        // allowing input without + if we want to auto-format, but strictly:
-        return preg_match('/^\+[1-9]\d{1,14}$/', $phone);
+        // Consider phone valid if it can be formatted to E.164
+        return $this->formatPhone($phone) !== null;
     }
 
     /**
@@ -61,14 +60,37 @@ class InputDetectionService
      */
     public function formatPhone(string $phone): ?string
     {
-        // Remove non-digit characters except +
-        $cleaned = preg_replace('/[^0-9+]/', '', $phone);
-        
-        // Basic E.164 check
-        if (preg_match('/^\+[1-9]\d{1,14}$/', $cleaned)) {
-            return $cleaned;
+        // If already valid E.164, return as-is
+        $trimmed = trim($phone);
+        if (preg_match('/^\+[1-9]\d{1,14}$/', $trimmed)) {
+            return $trimmed;
         }
 
-        return null;
+        // Remove all non-digits to work with local/national formats
+        $digits = preg_replace('/\D+/', '', $trimmed);
+        if ($digits === null || $digits === '') {
+            return null;
+        }
+
+        // Configurable defaults (tuned for e.g. IN by default)
+        $countryCode = config('input_detection.phone.country_code', '+91');
+        $nationalMin = (int) config('input_detection.phone.national_min_length', 10);
+        $nationalMax = (int) config('input_detection.phone.national_max_length', 12);
+
+        $countryDigits = ltrim($countryCode, '+');
+
+        // Strip leading country code if user included it without '+'
+        if (str_starts_with($digits, $countryDigits)) {
+            $nationalNumber = substr($digits, strlen($countryDigits));
+        } else {
+            $nationalNumber = $digits;
+        }
+
+        $length = strlen($nationalNumber);
+        if ($length < $nationalMin || $length > $nationalMax) {
+            return null;
+        }
+
+        return '+' . $countryDigits . $nationalNumber;
     }
 }

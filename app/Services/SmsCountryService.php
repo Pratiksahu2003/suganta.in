@@ -32,7 +32,7 @@ class SmsCountryService
      * @return array
      * @throws Exception
      */
-    public function sendTemplate($mobile, $templateKey, array $variables = [])
+    public function sendTemplate(string $mobile, string $templateKey, array $variables = []): array
     {
         if (!isset($this->templates[$templateKey])) {
             throw new Exception("SMS template '{$templateKey}' not found.");
@@ -72,7 +72,7 @@ class SmsCountryService
      * @param string|null $dltTemplateId
      * @return array
      */
-    public function sendRaw($mobile, $message, $dltTemplateId = null)
+    public function sendRaw(string $mobile, string $message, ?string $dltTemplateId = null): array
     {
         if (empty($this->authKey) || empty($this->authToken) || empty($this->url)) {
             Log::warning('SMS Country credentials are missing. SMS not sent.', [

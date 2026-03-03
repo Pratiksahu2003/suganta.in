@@ -7,6 +7,7 @@ use App\Models\UserSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Jenssegers\Agent\Agent;
 
 class SessionService
@@ -281,7 +282,7 @@ class SessionService
     /**
      * Get active sessions for a user with enhanced data
      */
-    public function getActiveSessions(User $user)
+    public function getActiveSessions(User $user): Collection
     {
         return UserSession::where('user_id', $user->id)
             ->where('is_active', true)
@@ -295,7 +296,7 @@ class SessionService
     /**
      * Get all sessions for a user with enhanced data
      */
-    public function getAllSessions(User $user, int $limit = 50)
+    public function getAllSessions(User $user, int $limit = 50): Collection
     {
         return UserSession::where('user_id', $user->id)
             ->orderBy('login_at', 'desc')

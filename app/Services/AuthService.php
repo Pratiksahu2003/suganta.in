@@ -138,9 +138,14 @@ class AuthService
             if ($type === 'email') {
                 $user = User::where('email', $identifier)->first();
             } elseif ($type === 'phone') {
-                // Ensure phone format matches DB storage (assuming E.164 or normalized)
-                // For now, we try exact match or simplified match
-                $user = User::where('phone', $identifier)->first();
+                // Normalize to E.164 before lookup so input formats like local numbers work
+                $normalizedPhone = $this->inputDetectionService->formatPhone($identifier);
+                if (!$normalizedPhone) {
+                    throw ValidationException::withMessages([
+                        'email' => ['Invalid phone number format'],
+                    ]);
+                }
+                $user = User::where('phone', $normalizedPhone)->first();
             }
 
             if (!$user || !Hash::check($credentials['password'], $user->password)) {
@@ -263,7 +268,13 @@ class AuthService
         if ($type === 'email') {
             $user = User::where('email', $identifier)->first();
         } elseif ($type === 'phone') {
-            $user = User::where('phone', $identifier)->first();
+            $normalizedPhone = $this->inputDetectionService->formatPhone($identifier);
+            if (!$normalizedPhone) {
+                throw ValidationException::withMessages([
+                    'identifier' => ['Invalid phone number format'],
+                ]);
+            }
+            $user = User::where('phone', $normalizedPhone)->first();
         }
 
         if (!$user) {
@@ -304,7 +315,13 @@ class AuthService
         if ($type === 'email') {
             $user = User::where('email', $identifier)->first();
         } elseif ($type === 'phone') {
-            $user = User::where('phone', $identifier)->first();
+            $normalizedPhone = $this->inputDetectionService->formatPhone($identifier);
+            if (!$normalizedPhone) {
+                throw ValidationException::withMessages([
+                    'identifier' => ['Invalid phone number format'],
+                ]);
+            }
+            $user = User::where('phone', $normalizedPhone)->first();
         }
 
         if (!$user) {

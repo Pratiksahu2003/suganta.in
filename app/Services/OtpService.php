@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 
 class OtpService
 {
-    protected $smsService;
+    protected SmsCountryService $smsService;
 
     public function __construct(SmsCountryService $smsService)
     {
@@ -120,7 +120,7 @@ class OtpService
         }
 
         // Check for max attempts (Lockout after 5 tries)
-        if ($otpRecord->attempt_count >= 5) {
+            if ($otpRecord->attempt_count >= 5) {
              // Invalidate OTP immediately if max attempts reached
              $otpRecord->update(['is_used' => true]);
              Log::warning("OTP max attempts reached for {$identifier}");
@@ -143,7 +143,7 @@ class OtpService
              // Assuming phone_verified_at exists or using email_verified_at as per original code
              // Original code used email_verified_at for phone too, preserving that behavior but should probably be phone_verified_at if column exists
              // I will use forceFill to be safe or check if property exists
-             if (\Schema::hasColumn('users', 'phone_verified_at')) {
+             if (Schema::hasColumn('users', 'phone_verified_at')) {
                  $user->phone_verified_at = now();
              } else {
                  $user->email_verified_at = now();
@@ -154,7 +154,7 @@ class OtpService
         return true;
     }
 
-    protected function sendEmailOtp(User $user, string $otp)
+    protected function sendEmailOtp(User $user, string $otp): void
     {
         try {
             Mail::send('emails.otp', [
@@ -170,7 +170,7 @@ class OtpService
         }
     }
 
-    protected function sendSmsOtp(User $user, string $otp)
+    protected function sendSmsOtp(User $user, string $otp): void
     {
         if (!$user->phone) {
             return;
