@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Profile;
 use App\Http\Controllers\Api\V1\BaseApiController;
 use App\Models\Profile;
 use App\Models\ProfileInstituteInfo;
+use App\Services\ProfileResponseFormatter;
 use App\Models\ProfileStudentInfo;
 use App\Models\ProfileTeachingInfo;
 use App\Services\PasswordNotificationService;
@@ -42,6 +43,8 @@ class ProfileController extends BaseApiController
             $profile->load(['instituteInfo', 'studentInfo', 'teachingInfo', 'professionalInfo', 'socialLinks']);
             $profile->updateCompletionPercentage();
 
+            $profileData = ProfileResponseFormatter::format($profile, [$this, 'getFileUrl']);
+
             $data = [
                 'user' => [
                     'id' => $user->id,
@@ -50,9 +53,9 @@ class ProfileController extends BaseApiController
                     'role' => $user->role,
                     'email_verified_at' => $user->email_verified_at,
                 ],
-                'profile' => $profile->toArray(),
-                'profile_image_url' => $profile->profile_image ? $this->getFileUrl($profile->profile_image) : null,
-                'completion_percentage' => $profile->profile_completion_percentage,
+                'profile' => $profileData['profile'],
+                'profile_image_url' => $profileData['profile_image_url'],
+                'completion_percentage' => $profileData['completion_percentage'],
             ];
 
             return $this->success('Profile retrieved successfully.', $data);
@@ -579,10 +582,10 @@ class ProfileController extends BaseApiController
             Cache::forget('profile_' . $profile->id);
             Cache::forget("profile_completion_data_{$profile->id}");
 
-            return $this->success('Profile data refreshed successfully.', [
-                'profile_image_url' => $profile->profile_image ? $this->getFileUrl($profile->profile_image) : null,
-                'profile' => $profile->fresh()->toArray(),
-            ]);
+            $profile->updateCompletionPercentage();
+            $profileData = ProfileResponseFormatter::format($profile->fresh(), [$this, 'getFileUrl']);
+
+            return $this->success('Profile data refreshed successfully.', $profileData);
         } catch (\Exception $e) {
             Log::error('Profile refresh error: ' . $e->getMessage());
             return $this->serverError('Unable to refresh profile data.');
