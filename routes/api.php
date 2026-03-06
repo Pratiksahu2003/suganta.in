@@ -67,23 +67,14 @@ Route::prefix('v1')->group(function (): void {
         Route::get('{supportTicket}/replies/{reply}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
     });
 
-    // Portfolio Routes
-    Route::prefix('portfolios')->group(function () {
-        // Public routes - no authentication required
-        Route::get('options', [PortfolioController::class, 'options']);
-        Route::get('/', [PortfolioController::class, 'index']);
-        Route::get('user/{userId}', [PortfolioController::class, 'getUserPortfolios']);
-        Route::get('{portfolio}', [PortfolioController::class, 'show']);
-
-        // Protected routes - authentication required
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::get('my/portfolios', [PortfolioController::class, 'myPortfolios']);
-            Route::post('/', [PortfolioController::class, 'store']);
-            Route::put('{portfolio}', [PortfolioController::class, 'update']);
-            Route::patch('{portfolio}', [PortfolioController::class, 'update']);
-            Route::delete('{portfolio}', [PortfolioController::class, 'destroy']);
-            Route::post('{portfolio}/toggle-featured', [PortfolioController::class, 'toggleFeatured']);
-            Route::post('reorder', [PortfolioController::class, 'reorder']);
+    // Portfolio Routes (auth user's data only)
+    Route::middleware('auth:sanctum')
+        ->prefix('portfolios')
+        ->controller(PortfolioController::class)
+        ->group(function () {
+            Route::get('options', 'options');
+            Route::get('/', 'show');
+            Route::post('/', 'store');
+            Route::match(['put', 'patch'], '{portfolio}', 'update');
         });
-    });
 });

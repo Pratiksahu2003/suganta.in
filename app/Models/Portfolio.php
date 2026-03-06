@@ -89,42 +89,10 @@ class Portfolio extends Model
     }
 
     /**
-     * Scope to filter published portfolios
-     */
-    public function scopePublished($query)
-    {
-        return $query->where('status', 'published');
-    }
-
-    /**
-     * Scope to filter featured portfolios
-     */
-    public function scopeFeatured($query)
-    {
-        return $query->where('is_featured', true);
-    }
-
-    /**
      * Scope to filter by user
      */
     public function scopeForUser($query, $userId)
     {
         return $query->where('user_id', $userId);
-    }
-
-    /**
-     * Scope to filter by category
-     */
-    public function scopeByCategory($query, $category)
-    {
-        return $query->where('category', 'like', "%{$category}%");
-    }
-
-    /**
-     * Scope to filter by tag
-     */
-    public function scopeByTag($query, $tag)
-    {
-        return $query->where('tags', 'like', "%{$tag}%");
     }
 }
