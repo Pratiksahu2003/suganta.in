@@ -24,7 +24,11 @@ class UserActivityNotificationService
             }
 
             $changeText = $this->buildProfileChangeMessage($changes);
-            $activityData = $this->buildActivityData($user, $changes);
+            $activityData = array_merge($this->buildActivityData($user, $changes), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -32,7 +36,7 @@ class UserActivityNotificationService
                 "Your profile has been updated: {$changeText}",
                 'profile',
                 $activityData,
-                route('dashboard.profile'),
+                null,
                 'low'
             );
         } catch (Exception $e) {
@@ -46,7 +50,11 @@ class UserActivityNotificationService
     public function passwordChanged(User $user, array $additionalInfo = []): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, $additionalInfo);
+            $securityData = array_merge($this->buildSecurityData($user, $additionalInfo), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -54,7 +62,7 @@ class UserActivityNotificationService
                 'Your password has been successfully changed. If you did not make this change, please contact support immediately.',
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -68,7 +76,11 @@ class UserActivityNotificationService
     public function passwordReset(User $user, array $additionalInfo = []): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, $additionalInfo);
+            $securityData = array_merge($this->buildSecurityData($user, $additionalInfo), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -76,7 +88,7 @@ class UserActivityNotificationService
                 'Your password has been reset successfully. If you did not request this reset, please contact support immediately.',
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -99,9 +111,12 @@ class UserActivityNotificationService
                     'user_id' => $user->id,
                     'verified_at' => now(),
                     'ip_address' => Request::ip(),
-                    'user_agent' => Request::userAgent()
+                    'user_agent' => Request::userAgent(),
+                    'resource_type' => 'profile',
+                    'resource_id' => $user->id,
+                    'action' => 'view'
                 ],
-                route('dashboard'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -115,7 +130,10 @@ class UserActivityNotificationService
     public function loginSuccessful(User $user, array $additionalInfo = []): void
     {
         try {
-            $loginData = $this->buildLoginData($user, $additionalInfo);
+            $loginData = array_merge($this->buildLoginData($user, $additionalInfo), [
+                'resource_type' => 'dashboard',
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -123,7 +141,7 @@ class UserActivityNotificationService
                 'You have successfully logged into your account.',
                 'login',
                 $loginData,
-                route('dashboard'),
+                null,
                 'low'
             );
         } catch (Exception $e) {
@@ -137,7 +155,13 @@ class UserActivityNotificationService
     public function loginFailed(User $user, string $reason = 'Invalid credentials'): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, ['reason' => $reason, 'failed_at' => now()]);
+            $securityData = array_merge($this->buildSecurityData($user, [
+                'reason' => $reason,
+                'failed_at' => now()
+            ]), [
+                'resource_type' => 'auth',
+                'action' => 'alert'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -145,7 +169,7 @@ class UserActivityNotificationService
                 "Failed login attempt: {$reason}",
                 'security',
                 $securityData,
-                route('login'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -159,9 +183,13 @@ class UserActivityNotificationService
     public function unusualLoginLocation(User $user, string $location): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, [
+            $securityData = array_merge($this->buildSecurityData($user, [
                 'location' => $location,
                 'device_type' => $this->getDeviceType(Request::userAgent())
+            ]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
             ]);
 
             $this->notificationService->createUserNotification(
@@ -170,7 +198,7 @@ class UserActivityNotificationService
                 "New login detected from {$location}. If this wasn't you, please secure your account immediately.",
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -184,9 +212,13 @@ class UserActivityNotificationService
     public function newDeviceLogin(User $user, string $deviceInfo): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, [
+            $securityData = array_merge($this->buildSecurityData($user, [
                 'device_info' => $deviceInfo,
                 'device_type' => $this->getDeviceType(Request::userAgent())
+            ]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
             ]);
 
             $this->notificationService->createUserNotification(
@@ -195,7 +227,7 @@ class UserActivityNotificationService
                 "New device login detected: {$deviceInfo}",
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -219,9 +251,11 @@ class UserActivityNotificationService
                     'logout_at' => now(),
                     'ip_address' => Request::ip(),
                     'user_agent' => Request::userAgent(),
-                    'session_duration' => $sessionDuration ?? 'Unknown'
+                    'session_duration' => $sessionDuration ?? 'Unknown',
+                    'resource_type' => 'auth',
+                    'action' => 'info'
                 ],
-                route('login'),
+                null,
                 'low'
             );
         } catch (Exception $e) {
@@ -235,7 +269,11 @@ class UserActivityNotificationService
     public function twoFactorEnabled(User $user): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, ['enabled_at' => now()]);
+            $securityData = array_merge($this->buildSecurityData($user, ['enabled_at' => now()]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -243,7 +281,7 @@ class UserActivityNotificationService
                 'Two-factor authentication has been enabled for your account.',
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -257,7 +295,11 @@ class UserActivityNotificationService
     public function twoFactorDisabled(User $user): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, ['disabled_at' => now()]);
+            $securityData = array_merge($this->buildSecurityData($user, ['disabled_at' => now()]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -265,7 +307,7 @@ class UserActivityNotificationService
                 'Two-factor authentication has been disabled for your account.',
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -279,9 +321,13 @@ class UserActivityNotificationService
     public function accountLocked(User $user, string $reason = 'Multiple failed login attempts'): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, [
+            $securityData = array_merge($this->buildSecurityData($user, [
                 'locked_at' => now(),
                 'reason' => $reason
+            ]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
             ]);
 
             $this->notificationService->createUserNotification(
@@ -290,7 +336,7 @@ class UserActivityNotificationService
                 "Your account has been locked: {$reason}",
                 'security',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -304,7 +350,10 @@ class UserActivityNotificationService
     public function accountUnlocked(User $user): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, ['unlocked_at' => now()]);
+            $securityData = array_merge($this->buildSecurityData($user, ['unlocked_at' => now()]), [
+                'resource_type' => 'auth',
+                'action' => 'info'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -312,7 +361,7 @@ class UserActivityNotificationService
                 'Your account has been unlocked. You can now log in normally.',
                 'security',
                 $securityData,
-                route('login'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -326,10 +375,14 @@ class UserActivityNotificationService
     public function emailChanged(User $user, string $oldEmail, string $newEmail): void
     {
         try {
-            $securityData = $this->buildSecurityData($user, [
+            $securityData = array_merge($this->buildSecurityData($user, [
                 'changed_at' => now(),
                 'old_email' => $oldEmail,
                 'new_email' => $newEmail
+            ]), [
+                'resource_type' => 'profile',
+                'resource_id' => $user->id,
+                'action' => 'security'
             ]);
 
             $this->notificationService->createUserNotification(
@@ -338,7 +391,7 @@ class UserActivityNotificationService
                 "Your email address has been changed from {$oldEmail} to {$newEmail}",
                 'account',
                 $securityData,
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -360,9 +413,11 @@ class UserActivityNotificationService
                 [
                     'user_id' => $user->id,
                     'sent_at' => now(),
-                    'email' => $user->email
+                    'email' => $user->email,
+                    'resource_type' => 'email',
+                    'action' => 'verify'
                 ],
-                route('verification.notice'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -388,9 +443,11 @@ class UserActivityNotificationService
                 [
                     'user_id' => $user->id,
                     'updated_at' => now(),
-                    'changes' => $changes
+                    'changes' => $changes,
+                    'resource_type' => 'settings',
+                    'action' => 'view'
                 ],
-                route('notifications.settings'),
+                null,
                 'low'
             );
         } catch (Exception $e) {
@@ -416,9 +473,11 @@ class UserActivityNotificationService
                 [
                     'user_id' => $user->id,
                     'updated_at' => now(),
-                    'changes' => $changes
+                    'changes' => $changes,
+                    'resource_type' => 'settings',
+                    'action' => 'view'
                 ],
-                route('dashboard.profile'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -441,9 +500,11 @@ class UserActivityNotificationService
                     'user_id' => $user->id,
                     'started_at' => now(),
                     'plan_name' => $planName,
-                    'amount' => $amount
+                    'amount' => $amount,
+                    'resource_type' => 'subscription',
+                    'action' => 'view'
                 ],
-                route('subscription.details'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -466,9 +527,11 @@ class UserActivityNotificationService
                     'user_id' => $user->id,
                     'cancelled_at' => now(),
                     'plan_name' => $planName,
-                    'end_date' => $endDate
+                    'end_date' => $endDate,
+                    'resource_type' => 'subscription',
+                    'action' => 'view'
                 ],
-                route('subscription.details'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -491,9 +554,11 @@ class UserActivityNotificationService
                     'user_id' => $user->id,
                     'renewed_at' => now(),
                     'plan_name' => $planName,
-                    'amount' => $amount
+                    'amount' => $amount,
+                    'resource_type' => 'subscription',
+                    'action' => 'view'
                 ],
-                route('subscription.details'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {

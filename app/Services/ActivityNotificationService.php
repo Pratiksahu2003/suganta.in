@@ -45,8 +45,12 @@ class ActivityNotificationService
                 'New Session Created',
                 "Your session '{$session->title}' has been created successfully for {$scheduledAt}",
                 'session',
-                $sessionData,
-                route('sessions.show', $session->id),
+                array_merge($sessionData, [
+                    'resource_type' => 'session',
+                    'resource_id' => $session->id,
+                    'action' => 'view'
+                ]),
+                null,
                 'normal'
             );
 
@@ -56,8 +60,13 @@ class ActivityNotificationService
                     'New Session Created',
                     "A new session '{$session->title}' has been created by {$teacher->name} in your institute",
                     'session',
-                    array_merge($sessionData, ['teacher_name' => $teacher->name]),
-                    route('sessions.show', $session->id),
+                    array_merge($sessionData, [
+                        'teacher_name' => $teacher->name,
+                        'resource_type' => 'session',
+                        'resource_id' => $session->id,
+                        'action' => 'view'
+                    ]),
+                    null,
                     'normal'
                 );
             }
@@ -83,7 +92,12 @@ class ActivityNotificationService
             }
 
             $changeText = $this->buildChangeMessage($changes);
-            $sessionData = array_merge($this->buildSessionData($session), ['changes' => $changes]);
+            $sessionData = array_merge($this->buildSessionData($session), [
+                'changes' => $changes,
+                'resource_type' => 'session',
+                'resource_id' => $session->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $teacher->id,
@@ -91,7 +105,7 @@ class ActivityNotificationService
                 "Session '{$session->title}' has been updated: {$changeText}",
                 'session',
                 $sessionData,
-                route('sessions.show', $session->id),
+                null,
                 'normal'
             );
 
@@ -103,7 +117,7 @@ class ActivityNotificationService
                         "Session '{$session->title}' has been updated: {$changeText}",
                         'session',
                         $sessionData,
-                        route('sessions.show', $session->id),
+                        null,
                         'normal'
                     );
                 }
@@ -126,7 +140,12 @@ class ActivityNotificationService
             }
 
             $reasonText = $reason ? " Reason: {$reason}" : '';
-            $sessionData = array_merge($this->buildSessionData($session), ['reason' => $reason]);
+            $sessionData = array_merge($this->buildSessionData($session), [
+                'reason' => $reason,
+                'resource_type' => 'session',
+                'resource_id' => $session->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $teacher->id,
@@ -134,7 +153,7 @@ class ActivityNotificationService
                 "Session '{$session->title}' has been cancelled.{$reasonText}",
                 'session',
                 $sessionData,
-                route('sessions.show', $session->id),
+                null,
                 'high'
             );
 
@@ -146,7 +165,7 @@ class ActivityNotificationService
                         "Session '{$session->title}' with {$teacher->name} has been cancelled.{$reasonText}",
                         'session',
                         array_merge($sessionData, ['teacher_name' => $teacher->name]),
-                        route('sessions.show', $session->id),
+                        null,
                         'high'
                     );
                 }
@@ -168,15 +187,20 @@ class ActivityNotificationService
                 return;
             }
 
-            $sessionData = $this->buildSessionData($session);
+            $sessionData = array_merge($this->buildSessionData($session), [
+                'time_until' => $timeUntil,
+                'resource_type' => 'session',
+                'resource_id' => $session->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $teacher->id,
                 'Session Reminder',
                 "Reminder: You have a session '{$session->title}' in {$timeUntil}",
                 'session',
-                array_merge($sessionData, ['time_until' => $timeUntil]),
-                route('sessions.show', $session->id),
+                $sessionData,
+                null,
                 'normal'
             );
 
@@ -187,8 +211,8 @@ class ActivityNotificationService
                         'Session Reminder',
                         "Reminder: You have a session '{$session->title}' with {$teacher->name} in {$timeUntil}",
                         'session',
-                        array_merge($sessionData, ['teacher_name' => $teacher->name, 'time_until' => $timeUntil]),
-                        route('sessions.show', $session->id),
+                        array_merge($sessionData, ['teacher_name' => $teacher->name]),
+                        null,
                         'normal'
                     );
                 }
@@ -210,7 +234,11 @@ class ActivityNotificationService
                 return;
             }
 
-            $ticketData = $this->buildTicketData($ticket);
+            $ticketData = array_merge($this->buildTicketData($ticket), [
+                'resource_type' => 'support_ticket',
+                'resource_id' => $ticket->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -218,7 +246,7 @@ class ActivityNotificationService
                 "Your support ticket '{$ticket->subject}' has been created successfully. Ticket ID: #{$ticket->id}",
                 'support',
                 $ticketData,
-                route('support-tickets.show', $ticket->id),
+                null,
                 'normal'
             );
 
@@ -228,7 +256,7 @@ class ActivityNotificationService
                 "New support ticket '{$ticket->subject}' created by {$user->name}. Priority: {$ticket->priority}",
                 'support',
                 array_merge($ticketData, ['user_name' => $user->name]),
-                route('admin.support-tickets.show', $ticket->id),
+                null,
                 $this->mapPriority($ticket->priority)
             );
         } catch (Exception $e) {
@@ -251,9 +279,12 @@ class ActivityNotificationService
                     'user_id' => $user->id,
                     'user_name' => $user->name,
                     'role' => $user->role,
-                    'verified_at' => now()
+                    'verified_at' => now(),
+                    'resource_type' => 'profile',
+                    'resource_id' => $user->id,
+                    'action' => 'view'
                 ],
-                route('dashboard'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -281,9 +312,11 @@ class ActivityNotificationService
                     'user_name' => $user->name,
                     'role' => $user->role,
                     'reason' => $reason,
-                    'rejected_at' => now()
+                    'rejected_at' => now(),
+                    'resource_type' => 'support_ticket',
+                    'action' => 'create'
                 ],
-                route('support-tickets.create'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -308,7 +341,12 @@ class ActivityNotificationService
             }
 
             $changeText = $this->buildTicketChangeMessage($changes);
-            $ticketData = array_merge($this->buildTicketData($ticket), ['changes' => $changes]);
+            $ticketData = array_merge($this->buildTicketData($ticket), [
+                'changes' => $changes,
+                'resource_type' => 'support_ticket',
+                'resource_id' => $ticket->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -316,7 +354,7 @@ class ActivityNotificationService
                 "Your support ticket '{$ticket->subject}' has been updated: {$changeText}",
                 'support',
                 $ticketData,
-                route('support-tickets.show', $ticket->id),
+                null,
                 'normal'
             );
 
@@ -329,7 +367,7 @@ class ActivityNotificationService
                         "Support ticket '{$ticket->subject}' has been assigned to you",
                         'support',
                         $ticketData,
-                        route('admin.support-tickets.show', $ticket->id),
+                        null,
                         'normal'
                     );
                 }
@@ -358,7 +396,10 @@ class ActivityNotificationService
 
             $ticketData = array_merge($this->buildTicketData($ticket), [
                 'replier_name' => $replier->name,
-                'reply_id' => $reply->id
+                'reply_id' => $reply->id,
+                'resource_type' => 'support_ticket',
+                'resource_id' => $ticket->id,
+                'action' => 'view'
             ]);
 
             if ($user->id !== $replier->id) {
@@ -368,7 +409,7 @@ class ActivityNotificationService
                     "You have received a reply on your support ticket '{$ticket->subject}' from {$replier->name}",
                     'support',
                     $ticketData,
-                    route('support-tickets.show', $ticket->id),
+                    null,
                     'normal'
                 );
             }
@@ -380,7 +421,7 @@ class ActivityNotificationService
                     "A reply has been added to support ticket '{$ticket->subject}' by {$replier->name}",
                     'support',
                     $ticketData,
-                    route('admin.support-tickets.show', $ticket->id),
+                    null,
                     'normal'
                 );
             }
@@ -415,9 +456,12 @@ class ActivityNotificationService
                     'sender_id' => $sender->id,
                     'sender_name' => $sender->name,
                     'content_preview' => $contentPreview,
-                    'sent_at' => $message->created_at ?? now()
+                    'sent_at' => $message->created_at ?? now(),
+                    'resource_type' => 'message',
+                    'resource_id' => $message->id,
+                    'action' => 'view'
                 ],
-                route('messages.show', $message->id),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -437,7 +481,11 @@ class ActivityNotificationService
                 return;
             }
 
-            $paymentData = $this->buildPaymentData($payment);
+            $paymentData = array_merge($this->buildPaymentData($payment), [
+                'resource_type' => 'payment',
+                'resource_id' => $payment->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -445,7 +493,7 @@ class ActivityNotificationService
                 "Your payment of {$payment->currency} {$payment->amount} has been processed successfully. Transaction ID: {$payment->transaction_id}",
                 'payment',
                 $paymentData,
-                route('payments.show', $payment->id),
+                null,
                 'normal'
             );
 
@@ -456,7 +504,7 @@ class ActivityNotificationService
                     "Large payment of {$payment->currency} {$payment->amount} received from {$user->name}",
                     'payment',
                     array_merge($paymentData, ['user_name' => $user->name]),
-                    route('admin.payments.show', $payment->id),
+                    null,
                     'normal'
                 );
             }
@@ -478,7 +526,12 @@ class ActivityNotificationService
             }
 
             $reasonText = $reason ? " Reason: {$reason}" : '';
-            $paymentData = array_merge($this->buildPaymentData($payment), ['reason' => $reason]);
+            $paymentData = array_merge($this->buildPaymentData($payment), [
+                'reason' => $reason,
+                'resource_type' => 'payment',
+                'resource_id' => $payment->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $user->id,
@@ -486,7 +539,7 @@ class ActivityNotificationService
                 "Your payment of {$payment->currency} {$payment->amount} has failed.{$reasonText}",
                 'payment',
                 $paymentData,
-                route('payments.show', $payment->id),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -508,7 +561,11 @@ class ActivityNotificationService
                 return;
             }
 
-            $reviewData = $this->buildReviewData($review);
+            $reviewData = array_merge($this->buildReviewData($review), [
+                'resource_type' => 'review',
+                'resource_id' => $review->id,
+                'action' => 'view'
+            ]);
 
             $this->notificationService->createUserNotification(
                 $teacher->user_id,
@@ -516,7 +573,7 @@ class ActivityNotificationService
                 "You have received a new {$review->rating}-star review from {$reviewer->name}",
                 'review',
                 $reviewData,
-                route('reviews.show', $review->id),
+                null,
                 'normal'
             );
 
@@ -527,7 +584,7 @@ class ActivityNotificationService
                     "{$teacher->user->name} has received a new {$review->rating}-star review from {$reviewer->name}",
                     'review',
                     array_merge($reviewData, ['teacher_name' => $teacher->user->name]),
-                    route('reviews.show', $review->id),
+                    null,
                     'normal'
                 );
             }
@@ -557,7 +614,10 @@ class ActivityNotificationService
                 'teacher_name' => $teacherUser->name,
                 'institute_id' => $institute->id,
                 'institute_name' => $institute->name,
-                'joined_at' => now()
+                'joined_at' => now(),
+                'resource_type' => 'institute',
+                'resource_id' => $institute->id,
+                'action' => 'view'
             ];
 
             $this->notificationService->createUserNotification(
@@ -566,7 +626,7 @@ class ActivityNotificationService
                 "{$teacherUser->name} has joined your institute as a teacher",
                 'institute',
                 $instituteData,
-                route('institute.teachers.show', $teacher->id),
+                null,
                 'normal'
             );
 
@@ -576,7 +636,7 @@ class ActivityNotificationService
                 "{$teacherUser->name} has joined {$institute->name} as a teacher",
                 'institute',
                 $instituteData,
-                route('admin.users.show', $teacher->user_id),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -605,7 +665,10 @@ class ActivityNotificationService
                 'student_name' => $studentUser->name,
                 'institute_id' => $institute->id,
                 'institute_name' => $institute->name,
-                'enrolled_at' => now()
+                'enrolled_at' => now(),
+                'resource_type' => 'institute',
+                'resource_id' => $institute->id,
+                'action' => 'view'
             ];
 
             $this->notificationService->createUserNotification(
@@ -614,7 +677,7 @@ class ActivityNotificationService
                 "{$studentUser->name} has enrolled in your institute",
                 'institute',
                 $enrollmentData,
-                route('institute.students.show', $student->id),
+                null,
                 'normal'
             );
 
@@ -624,7 +687,7 @@ class ActivityNotificationService
                 "You have successfully enrolled in {$institute->name}",
                 'institute',
                 $enrollmentData,
-                route('student.dashboard'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
@@ -655,9 +718,11 @@ class ActivityNotificationService
                     'scheduled_at' => $scheduledAt,
                     'duration' => $duration,
                     'description' => $description,
-                    'announced_at' => now()
+                    'announced_at' => now(),
+                    'resource_type' => 'system',
+                    'action' => 'info'
                 ],
-                route('maintenance.info'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -679,7 +744,9 @@ class ActivityNotificationService
                 [
                     'feature_name' => $featureName,
                     'description' => $description,
-                    'announced_at' => now()
+                    'announced_at' => now(),
+                    'resource_type' => 'feature',
+                    'action' => 'info'
                 ],
                 $actionUrl,
                 'normal'
@@ -704,9 +771,12 @@ class ActivityNotificationService
                     'user_id' => $user->id,
                     'alert_type' => $alertType,
                     'description' => $description,
-                    'alerted_at' => now()
+                    'alerted_at' => now(),
+                    'resource_type' => 'profile',
+                    'resource_id' => $user->id,
+                    'action' => 'security'
                 ],
-                route('dashboard.profile'),
+                null,
                 'high'
             );
         } catch (Exception $e) {
@@ -730,9 +800,11 @@ class ActivityNotificationService
                     'user_id' => $user->id,
                     'date' => now()->format('Y-m-d'),
                     'summary' => $summary,
-                    'generated_at' => now()
+                    'generated_at' => now(),
+                    'resource_type' => 'dashboard',
+                    'action' => 'view'
                 ],
-                route('dashboard'),
+                null,
                 'low'
             );
         } catch (Exception $e) {
@@ -755,9 +827,11 @@ class ActivityNotificationService
                     'user_id' => $user->id,
                     'week' => now()->format('Y-W'),
                     'report' => $report,
-                    'generated_at' => now()
+                    'generated_at' => now(),
+                    'resource_type' => 'report',
+                    'action' => 'view'
                 ],
-                route('reports.weekly'),
+                null,
                 'normal'
             );
         } catch (Exception $e) {
