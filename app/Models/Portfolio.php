@@ -30,6 +30,56 @@ class Portfolio extends Model
         'order' => 'integer',
     ];
 
+    protected $appends = ['tags_array', 'categories_array'];
+
+    /**
+     * Get tags as an array
+     */
+    public function getTagsArrayAttribute(): array
+    {
+        if (empty($this->tags)) {
+            return [];
+        }
+        
+        return array_map('trim', explode(',', $this->tags));
+    }
+
+    /**
+     * Get categories as an array
+     */
+    public function getCategoriesArrayAttribute(): array
+    {
+        if (empty($this->category)) {
+            return [];
+        }
+        
+        return array_map('trim', explode(',', $this->category));
+    }
+
+    /**
+     * Set tags from array or string
+     */
+    public function setTagsAttribute($value): void
+    {
+        if (is_array($value)) {
+            $this->attributes['tags'] = implode(', ', array_filter(array_map('trim', $value)));
+        } else {
+            $this->attributes['tags'] = $value;
+        }
+    }
+
+    /**
+     * Set category from array or string
+     */
+    public function setCategoryAttribute($value): void
+    {
+        if (is_array($value)) {
+            $this->attributes['category'] = implode(', ', array_filter(array_map('trim', $value)));
+        } else {
+            $this->attributes['category'] = $value;
+        }
+    }
+
     /**
      * Get the user that owns the portfolio
      */
@@ -67,6 +117,14 @@ class Portfolio extends Model
      */
     public function scopeByCategory($query, $category)
     {
-        return $query->where('category', $category);
+        return $query->where('category', 'like', "%{$category}%");
+    }
+
+    /**
+     * Scope to filter by tag
+     */
+    public function scopeByTag($query, $tag)
+    {
+        return $query->where('tags', 'like', "%{$tag}%");
     }
 }

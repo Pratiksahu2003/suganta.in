@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Upload Disk (Portfolios, Support Tickets, etc.)
+    |--------------------------------------------------------------------------
+    |
+    | Change this to switch storage backend. No code changes needed.
+    | - 'public' = Local (storage/app/public)
+    | - 's3' = AWS S3
+    | - 'gcs' = Google Cloud Storage
+    |
+    */
+
+    'upload_disk' => env('FILESYSTEM_UPLOAD_DISK', 'public'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
@@ -56,6 +70,18 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'gcs' => [
+            'driver' => 'gcs',
+            'project_id' => env('GCP_PROJECT_ID'),
+            'key_file' => env('GCP_KEY_FILE'),
+            'bucket' => env('GCP_BUCKET'),
+            'path_prefix' => env('GCP_PATH_PREFIX', ''),
+            'storage_api_uri' => env('GCP_STORAGE_API_URI', null),
+            'visibility' => 'public',
             'throw' => false,
             'report' => false,
         ],

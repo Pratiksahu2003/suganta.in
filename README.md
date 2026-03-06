@@ -98,6 +98,14 @@ API routes use the default `api` throttle (e.g. 60 requests per minute). Configu
 
 - [Option API](docs/OptionApi.md)
 - [Registration API](docs/RegistrationApi.md)
+- [Portfolio API](docs/PortfolioApi.md)
+
+## File Storage Documentation
+
+- [Storage Structure](docs/StorageStructure.md) - Directory structure and conventions
+- [HandlesFileStorage Trait](docs/HandlesFileStorageTrait.md) - Centralized file operations
+- [File Storage Architecture](docs/FileStorageArchitecture.md) - Architecture and design
+- [Storage Migration Guide](STORAGE_MIGRATION_GUIDE.md) - Migration for existing installations
 
 ## License
 

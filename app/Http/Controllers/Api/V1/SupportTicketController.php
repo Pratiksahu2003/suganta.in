@@ -6,10 +6,10 @@ use App\Models\SupportTicket;
 use App\Models\SupportTicketReply;
 use App\Models\User;
 use App\Services\ActivityNotificationService;
+use App\Traits\HandlesFileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,6 +17,8 @@ use Exception;
 
 class SupportTicketController extends BaseApiController
 {
+    use HandlesFileStorage;
+
     protected ActivityNotificationService $notificationService;
 
     public function __construct(ActivityNotificationService $notificationService)
@@ -108,7 +110,12 @@ class SupportTicketController extends BaseApiController
 
             $attachmentPath = null;
             if ($request->hasFile('attachment')) {
-                $attachmentPath = $this->handleFileUpload($request->file('attachment'), $user->id);
+                $attachmentPath = $this->uploadFile(
+                    $request->file('attachment'),
+                    $user->id,
+                    'ticket',
+                    'support-ticket'
+                );
             }
 
             $ticket = SupportTicket::create([
@@ -226,7 +233,12 @@ class SupportTicketController extends BaseApiController
                 if ($supportTicket->attachment_path) {
                     $this->deleteFile($supportTicket->attachment_path);
                 }
-                $validated['attachment_path'] = $this->handleFileUpload($request->file('attachment'), $user->id);
+                $validated['attachment_path'] = $this->uploadFile(
+                    $request->file('attachment'),
+                    $user->id,
+                    'ticket',
+                    'support-ticket'
+                );
             }
 
             $supportTicket->fill($validated);
@@ -311,7 +323,12 @@ class SupportTicketController extends BaseApiController
 
             $attachmentPath = null;
             if ($request->hasFile('attachment')) {
-                $attachmentPath = $this->handleFileUpload($request->file('attachment'), $user->id, 'reply');
+                $attachmentPath = $this->uploadFile(
+                    $request->file('attachment'),
+                    $user->id,
+                    'reply',
+                    'support-ticket'
+                );
             }
 
             $reply = SupportTicketReply::create([
@@ -417,49 +434,6 @@ class SupportTicketController extends BaseApiController
             ]);
             
             return $this->error('Failed to download attachment. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Handle file upload for support tickets.
-     */
-    protected function handleFileUpload($file, int $userId, string $type = 'ticket'): string
-    {
-        $timestamp = now()->format('YmdHis');
-        $randomString = bin2hex(random_bytes(8));
-        $extension = $file->getClientOriginalExtension();
-        $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-        $sanitizedName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $originalName);
-        
-        $filename = "{$type}_{$userId}_{$timestamp}_{$randomString}_{$sanitizedName}.{$extension}";
-        
-        $path = $file->storeAs('support-tickets', $filename, 'public');
-        
-        Log::info('Support ticket file uploaded', [
-            'user_id' => $userId,
-            'filename' => $filename,
-            'path' => $path,
-            'size' => $file->getSize()
-        ]);
-        
-        return $path;
-    }
-
-    /**
-     * Delete file from storage.
-     */
-    protected function deleteFile(string $path): void
-    {
-        try {
-            if (Storage::disk('public')->exists($path)) {
-                Storage::disk('public')->delete($path);
-                Log::info('Support ticket file deleted', ['path' => $path]);
-            }
-        } catch (Exception $e) {
-            Log::warning('Failed to delete support ticket file', [
-                'path' => $path,
-                'error' => $e->getMessage()
-            ]);
         }
     }
 }

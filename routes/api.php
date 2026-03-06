@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\RegistrationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\VerificationController;
 use App\Http\Controllers\Api\V1\SupportTicketController;
+use App\Http\Controllers\Api\V1\PortfolioController;
 
 /*
 |--------------------------------------------------------------------------
@@ -64,5 +65,25 @@ Route::prefix('v1')->group(function (): void {
         Route::post('{supportTicket}/reply', [SupportTicketController::class, 'reply']);
         Route::get('{supportTicket}/attachment', [SupportTicketController::class, 'downloadAttachment']);
         Route::get('{supportTicket}/replies/{reply}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
+    });
+
+    // Portfolio Routes
+    Route::prefix('portfolios')->group(function () {
+        // Public routes - no authentication required
+        Route::get('options', [PortfolioController::class, 'options']);
+        Route::get('/', [PortfolioController::class, 'index']);
+        Route::get('user/{userId}', [PortfolioController::class, 'getUserPortfolios']);
+        Route::get('{portfolio}', [PortfolioController::class, 'show']);
+
+        // Protected routes - authentication required
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::get('my/portfolios', [PortfolioController::class, 'myPortfolios']);
+            Route::post('/', [PortfolioController::class, 'store']);
+            Route::put('{portfolio}', [PortfolioController::class, 'update']);
+            Route::patch('{portfolio}', [PortfolioController::class, 'update']);
+            Route::delete('{portfolio}', [PortfolioController::class, 'destroy']);
+            Route::post('{portfolio}/toggle-featured', [PortfolioController::class, 'toggleFeatured']);
+            Route::post('reorder', [PortfolioController::class, 'reorder']);
+        });
     });
 });
