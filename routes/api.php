@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Auth\VerificationController;
 use App\Http\Controllers\Api\V1\SupportTicketController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PortfolioController;
+use App\Http\Controllers\Api\V1\ContactController;
 
 /*
 |--------------------------------------------------------------------------
@@ -52,6 +53,9 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('options', [OptionController::class, 'index']);
     Route::get('registration/charges', [RegistrationController::class, 'charges']);
+
+    // Contact form (public - no auth)
+    Route::post('contacts', [ContactController::class, 'store']);
 
     // Support Ticket Routes (protected)
     Route::middleware('auth:sanctum')->prefix('support-tickets')->group(function () {
