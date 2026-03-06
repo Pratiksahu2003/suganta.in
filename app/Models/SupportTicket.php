@@ -306,4 +306,64 @@ class SupportTicket extends Model
     {
         return $user->isAdmin() || $this->user_id === $user->id;
     }
+
+    /**
+     * Check if ticket has attachment
+     */
+    public function hasAttachment(): bool
+    {
+        return !empty($this->attachment_path);
+    }
+
+    /**
+     * Get attachment filename
+     */
+    public function getAttachmentFilename(): ?string
+    {
+        if (!$this->hasAttachment()) {
+            return null;
+        }
+        return basename($this->attachment_path);
+    }
+
+    /**
+     * Get attachment URL
+     */
+    public function getAttachmentUrl(): ?string
+    {
+        if (!$this->hasAttachment()) {
+            return null;
+        }
+        return asset('storage/' . $this->attachment_path);
+    }
+
+    /**
+     * Get attachment size
+     */
+    public function getAttachmentSize(): ?int
+    {
+        if (!$this->hasAttachment()) {
+            return null;
+        }
+        
+        $filePath = storage_path('app/public/' . $this->attachment_path);
+        return file_exists($filePath) ? filesize($filePath) : null;
+    }
+
+    /**
+     * Get formatted attachment size
+     */
+    public function getFormattedAttachmentSize(): ?string
+    {
+        $size = $this->getAttachmentSize();
+        
+        if (!$size) {
+            return null;
+        }
+        
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $power = $size > 0 ? floor(log($size, 1024)) : 0;
+        
+        return number_format($size / pow(1024, $power), 2) . ' ' . $units[$power];
+    }
 } 

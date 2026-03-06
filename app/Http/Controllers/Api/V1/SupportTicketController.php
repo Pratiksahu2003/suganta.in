@@ -3,15 +3,26 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Models\SupportTicket;
+use App\Models\SupportTicketReply;
 use App\Models\User;
+use App\Services\ActivityNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
+use Exception;
 
 class SupportTicketController extends BaseApiController
 {
+    protected ActivityNotificationService $notificationService;
+
+    public function __construct(ActivityNotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
     /**
      * Get dropdown option values for support tickets.
      */
@@ -64,43 +75,66 @@ class SupportTicketController extends BaseApiController
      */
     public function store(Request $request): JsonResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
+        try {
+            /** @var User $user */
+            $user = Auth::user();
 
-        $validated = $request->validate([
-            'subject' => ['required', 'string', 'max:255'],
-            'message' => ['required', 'string'],
-            'priority' => [
-                'required',
-                'string',
-                Rule::in([
-                    SupportTicket::PRIORITY_LOW,
-                    SupportTicket::PRIORITY_MEDIUM,
-                    SupportTicket::PRIORITY_HIGH,
-                    SupportTicket::PRIORITY_URGENT,
-                ]),
-            ],
-            'category' => [
-                'required',
-                'string',
-                Rule::in(array_keys(SupportTicket::getCategoryOptions())),
-            ],
-            'attachment_path' => ['nullable', 'string', 'max:255'],
-            'user_notes' => ['nullable', 'string'],
-        ]);
+            $validated = $request->validate([
+                'subject' => ['required', 'string', 'max:255'],
+                'message' => ['required', 'string'],
+                'priority' => [
+                    'required',
+                    'string',
+                    Rule::in([
+                        SupportTicket::PRIORITY_LOW,
+                        SupportTicket::PRIORITY_MEDIUM,
+                        SupportTicket::PRIORITY_HIGH,
+                        SupportTicket::PRIORITY_URGENT,
+                    ]),
+                ],
+                'category' => [
+                    'required',
+                    'string',
+                    Rule::in(array_keys(SupportTicket::getCategoryOptions())),
+                ],
+                'attachment' => [
+                    'nullable',
+                    'file',
+                    'max:10240',
+                    'mimes:jpg,jpeg,png,pdf,doc,docx,txt,zip'
+                ],
+                'user_notes' => ['nullable', 'string', 'max:1000'],
+            ]);
 
-        $ticket = SupportTicket::create([
-            'user_id' => $user->id,
-            'subject' => $validated['subject'],
-            'message' => $validated['message'],
-            'priority' => $validated['priority'],
-            'category' => $validated['category'],
-            'attachment_path' => $validated['attachment_path'] ?? null,
-            'user_notes' => $validated['user_notes'] ?? null,
-            'status' => SupportTicket::STATUS_OPEN,
-        ]);
+            $attachmentPath = null;
+            if ($request->hasFile('attachment')) {
+                $attachmentPath = $this->handleFileUpload($request->file('attachment'), $user->id);
+            }
 
-        return $this->created($ticket, 'Support ticket created successfully.');
+            $ticket = SupportTicket::create([
+                'user_id' => $user->id,
+                'subject' => $validated['subject'],
+                'message' => $validated['message'],
+                'priority' => $validated['priority'],
+                'category' => $validated['category'],
+                'attachment_path' => $attachmentPath,
+                'user_notes' => $validated['user_notes'] ?? null,
+                'status' => SupportTicket::STATUS_OPEN,
+            ]);
+
+            $ticket->load(['user', 'assignedAdmin']);
+
+            $this->notificationService->supportTicketCreated($ticket);
+
+            return $this->created($ticket, 'Support ticket created successfully.');
+        } catch (Exception $e) {
+            Log::error('Failed to create support ticket', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to create support ticket. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
@@ -125,70 +159,103 @@ class SupportTicketController extends BaseApiController
      */
     public function update(Request $request, SupportTicket $supportTicket): JsonResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
+        try {
+            /** @var User $user */
+            $user = Auth::user();
 
-        if (!$supportTicket->canBeAccessedBy($user)) {
-            return $this->forbidden('You are not allowed to update this ticket.');
-        }
+            if (!$supportTicket->canBeAccessedBy($user)) {
+                return $this->forbidden('You are not allowed to update this ticket.');
+            }
 
-        $rules = [
-            'subject' => ['sometimes', 'string', 'max:255'],
-            'message' => ['sometimes', 'string'],
-            'priority' => [
-                'sometimes',
-                'string',
-                Rule::in([
-                    SupportTicket::PRIORITY_LOW,
-                    SupportTicket::PRIORITY_MEDIUM,
-                    SupportTicket::PRIORITY_HIGH,
-                    SupportTicket::PRIORITY_URGENT,
-                ]),
-            ],
-            'category' => [
-                'sometimes',
-                'string',
-                Rule::in(array_keys(SupportTicket::getCategoryOptions())),
-            ],
-            'attachment_path' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'user_notes' => ['sometimes', 'nullable', 'string'],
-        ];
-
-        if ($user->isAdmin()) {
-            $rules = array_merge($rules, [
-                'status' => [
+            $rules = [
+                'subject' => ['sometimes', 'string', 'max:255'],
+                'message' => ['sometimes', 'string'],
+                'priority' => [
                     'sometimes',
                     'string',
-                    Rule::in(array_keys(SupportTicket::getStatusOptions())),
+                    Rule::in([
+                        SupportTicket::PRIORITY_LOW,
+                        SupportTicket::PRIORITY_MEDIUM,
+                        SupportTicket::PRIORITY_HIGH,
+                        SupportTicket::PRIORITY_URGENT,
+                    ]),
                 ],
-                'admin_notes' => ['sometimes', 'nullable', 'string'],
-                'assigned_to' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-                'assigned_admin_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-                'resolved_at' => ['sometimes', 'nullable', 'date'],
-            ]);
-        }
+                'category' => [
+                    'sometimes',
+                    'string',
+                    Rule::in(array_keys(SupportTicket::getCategoryOptions())),
+                ],
+                'attachment' => [
+                    'nullable',
+                    'file',
+                    'max:10240',
+                    'mimes:jpg,jpeg,png,pdf,doc,docx,txt,zip'
+                ],
+                'user_notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            ];
 
-        $validated = $request->validate($rules);
+            if ($user->isAdmin()) {
+                $rules = array_merge($rules, [
+                    'status' => [
+                        'sometimes',
+                        'string',
+                        Rule::in(array_keys(SupportTicket::getStatusOptions())),
+                    ],
+                    'admin_notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
+                    'assigned_to' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+                    'assigned_admin_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+                    'resolved_at' => ['sometimes', 'nullable', 'date'],
+                ]);
+            }
 
-        if (!$user->isAdmin()) {
-            unset(
-                $validated['status'],
-                $validated['admin_notes'],
-                $validated['assigned_to'],
-                $validated['assigned_admin_id'],
-                $validated['resolved_at']
+            $validated = $request->validate($rules);
+
+            if (!$user->isAdmin()) {
+                unset(
+                    $validated['status'],
+                    $validated['admin_notes'],
+                    $validated['assigned_to'],
+                    $validated['assigned_admin_id'],
+                    $validated['resolved_at']
+                );
+            }
+
+            $originalData = $supportTicket->only(['status', 'priority', 'assigned_to', 'category']);
+
+            if ($request->hasFile('attachment')) {
+                if ($supportTicket->attachment_path) {
+                    $this->deleteFile($supportTicket->attachment_path);
+                }
+                $validated['attachment_path'] = $this->handleFileUpload($request->file('attachment'), $user->id);
+            }
+
+            $supportTicket->fill($validated);
+
+            if (isset($validated['status']) && $validated['status'] === SupportTicket::STATUS_RESOLVED && !$supportTicket->resolved_at) {
+                $supportTicket->resolved_at = now();
+            }
+
+            $supportTicket->save();
+
+            $changes = array_diff_assoc(
+                $supportTicket->only(['status', 'priority', 'assigned_to', 'category']),
+                $originalData
             );
+
+            if (!empty($changes)) {
+                $this->notificationService->supportTicketUpdated($supportTicket, $changes);
+            }
+
+            return $this->success('Support ticket updated successfully.', $supportTicket->fresh(['user', 'assignedAdmin']));
+        } catch (Exception $e) {
+            Log::error('Failed to update support ticket', [
+                'ticket_id' => $supportTicket->id ?? null,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to update support ticket. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-
-        $supportTicket->fill($validated);
-
-        if (isset($validated['status']) && $validated['status'] === SupportTicket::STATUS_RESOLVED && !$supportTicket->resolved_at) {
-            $supportTicket->resolved_at = now();
-        }
-
-        $supportTicket->save();
-
-        return $this->success('Support ticket updated successfully.', $supportTicket->fresh(['user', 'assignedAdmin']));
     }
 
     /**
@@ -196,16 +263,204 @@ class SupportTicketController extends BaseApiController
      */
     public function destroy(SupportTicket $supportTicket): JsonResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
+        try {
+            /** @var User $user */
+            $user = Auth::user();
 
-        if (!$supportTicket->canBeClosedBy($user)) {
-            return $this->forbidden('You are not allowed to delete this ticket.');
+            if (!$supportTicket->canBeClosedBy($user)) {
+                return $this->forbidden('You are not allowed to delete this ticket.');
+            }
+
+            $supportTicket->delete();
+
+            return $this->noContent();
+        } catch (Exception $e) {
+            Log::error('Failed to delete support ticket', [
+                'ticket_id' => $supportTicket->id ?? null,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to delete support ticket. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
+    }
 
-        $supportTicket->delete();
+    /**
+     * Reply to a support ticket.
+     */
+    public function reply(Request $request, SupportTicket $supportTicket): JsonResponse
+    {
+        try {
+            /** @var User $user */
+            $user = Auth::user();
 
-        return $this->noContent();
+            if (!$supportTicket->canBeRepliedToBy($user)) {
+                return $this->forbidden('You are not allowed to reply to this ticket.');
+            }
+
+            $validated = $request->validate([
+                'message' => ['required', 'string'],
+                'attachment' => [
+                    'nullable',
+                    'file',
+                    'max:10240',
+                    'mimes:jpg,jpeg,png,pdf,doc,docx,txt,zip'
+                ],
+                'internal_notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $attachmentPath = null;
+            if ($request->hasFile('attachment')) {
+                $attachmentPath = $this->handleFileUpload($request->file('attachment'), $user->id, 'reply');
+            }
+
+            $reply = SupportTicketReply::create([
+                'support_ticket_id' => $supportTicket->id,
+                'user_id' => $user->id,
+                'message' => $validated['message'],
+                'is_admin_reply' => $user->isAdmin(),
+                'attachment_path' => $attachmentPath,
+                'internal_notes' => $validated['internal_notes'] ?? null,
+            ]);
+
+            $supportTicket->update([
+                'status' => $user->isAdmin() 
+                    ? SupportTicket::STATUS_WAITING_FOR_USER 
+                    : SupportTicket::STATUS_IN_PROGRESS
+            ]);
+
+            $reply->load('user');
+
+            $this->notificationService->supportTicketReplied($supportTicket, $reply);
+
+            return $this->created($reply, 'Reply added successfully.');
+        } catch (Exception $e) {
+            Log::error('Failed to reply to support ticket', [
+                'ticket_id' => $supportTicket->id ?? null,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to add reply. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Download attachment from support ticket.
+     */
+    public function downloadAttachment(SupportTicket $supportTicket): mixed
+    {
+        try {
+            /** @var User $user */
+            $user = Auth::user();
+
+            if (!$supportTicket->canDownloadAttachmentsBy($user)) {
+                return $this->forbidden('You are not allowed to download attachments from this ticket.');
+            }
+
+            if (!$supportTicket->attachment_path) {
+                return $this->notFound('No attachment found for this ticket.');
+            }
+
+            $filePath = storage_path('app/public/' . $supportTicket->attachment_path);
+
+            if (!file_exists($filePath)) {
+                return $this->notFound('Attachment file not found.');
+            }
+
+            return response()->download($filePath);
+        } catch (Exception $e) {
+            Log::error('Failed to download support ticket attachment', [
+                'ticket_id' => $supportTicket->id ?? null,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to download attachment. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Download attachment from support ticket reply.
+     */
+    public function downloadReplyAttachment(SupportTicket $supportTicket, SupportTicketReply $reply): mixed
+    {
+        try {
+            /** @var User $user */
+            $user = Auth::user();
+
+            if (!$supportTicket->canDownloadAttachmentsBy($user)) {
+                return $this->forbidden('You are not allowed to download attachments from this ticket.');
+            }
+
+            if ($reply->support_ticket_id !== $supportTicket->id) {
+                return $this->forbidden('Reply does not belong to this ticket.');
+            }
+
+            if (!$reply->attachment_path) {
+                return $this->notFound('No attachment found for this reply.');
+            }
+
+            $filePath = storage_path('app/public/' . $reply->attachment_path);
+
+            if (!file_exists($filePath)) {
+                return $this->notFound('Attachment file not found.');
+            }
+
+            return response()->download($filePath);
+        } catch (Exception $e) {
+            Log::error('Failed to download reply attachment', [
+                'ticket_id' => $supportTicket->id ?? null,
+                'reply_id' => $reply->id ?? null,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return $this->error('Failed to download attachment. Please try again.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Handle file upload for support tickets.
+     */
+    protected function handleFileUpload($file, int $userId, string $type = 'ticket'): string
+    {
+        $timestamp = now()->format('YmdHis');
+        $randomString = bin2hex(random_bytes(8));
+        $extension = $file->getClientOriginalExtension();
+        $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $sanitizedName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $originalName);
+        
+        $filename = "{$type}_{$userId}_{$timestamp}_{$randomString}_{$sanitizedName}.{$extension}";
+        
+        $path = $file->storeAs('support-tickets', $filename, 'public');
+        
+        Log::info('Support ticket file uploaded', [
+            'user_id' => $userId,
+            'filename' => $filename,
+            'path' => $path,
+            'size' => $file->getSize()
+        ]);
+        
+        return $path;
+    }
+
+    /**
+     * Delete file from storage.
+     */
+    protected function deleteFile(string $path): void
+    {
+        try {
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+                Log::info('Support ticket file deleted', ['path' => $path]);
+            }
+        } catch (Exception $e) {
+            Log::warning('Failed to delete support ticket file', [
+                'path' => $path,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }
 

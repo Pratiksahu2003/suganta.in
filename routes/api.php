@@ -52,9 +52,17 @@ Route::prefix('v1')->group(function (): void {
     Route::get('registration/charges', [RegistrationController::class, 'charges']);
 
     // Support Ticket Routes (protected)
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('support-tickets/options', [SupportTicketController::class, 'options']);
-        Route::apiResource('support-tickets', SupportTicketController::class)
-            ->parameters(['support-tickets' => 'supportTicket']);
+    Route::middleware('auth:sanctum')->prefix('support-tickets')->group(function () {
+        Route::get('options', [SupportTicketController::class, 'options']);
+        Route::get('/', [SupportTicketController::class, 'index']);
+        Route::post('/', [SupportTicketController::class, 'store']);
+        Route::get('{supportTicket}', [SupportTicketController::class, 'show']);
+        Route::put('{supportTicket}', [SupportTicketController::class, 'update']);
+        Route::patch('{supportTicket}', [SupportTicketController::class, 'update']);
+        Route::delete('{supportTicket}', [SupportTicketController::class, 'destroy']);
+        
+        Route::post('{supportTicket}/reply', [SupportTicketController::class, 'reply']);
+        Route::get('{supportTicket}/attachment', [SupportTicketController::class, 'downloadAttachment']);
+        Route::get('{supportTicket}/replies/{reply}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
     });
 });
