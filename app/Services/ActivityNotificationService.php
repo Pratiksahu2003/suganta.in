@@ -2,10 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Notification;
 use App\Models\User;
-use App\Models\Role;
-use App\Models\Session;
+use App\Models\TeacherSession;
 use App\Models\SupportTicket;
 use App\Models\Message;
 use App\Models\Payment;
@@ -15,876 +13,855 @@ use App\Models\TeacherProfile;
 use App\Models\StudentProfile;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Request;
+use Exception;
 
 class ActivityNotificationService
 {
-    protected $notificationService;
+    protected NotificationService $notificationService;
 
     public function __construct(NotificationService $notificationService)
     {
         $this->notificationService = $notificationService;
     }
 
-    // ========================================
-    // SESSION RELATED NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Session created notification
-     */
-    public function sessionCreated(Session $session)
+    public function sessionCreated(TeacherSession $session): void
     {
-        $teacher = $session->teacher;
-        $student = $session->student;
-        $institute = $session->institute;
+        try {
+            $teacher = $session->teacher;
+            $institute = $session->institute ?? null;
 
-        // Notify student
-        $this->notificationService->createUserNotification(
-            $student->user_id,
-            'New Session Scheduled',
-            "A new session '{$session->title}' has been scheduled with {$teacher->user->name} on " . $session->scheduled_at->format('M d, Y g:i A'),
-            'session',
-            [
-                'session_id' => $session->id,
-                'teacher_name' => $teacher->user->name,
-                'session_title' => $session->title,
-                'scheduled_at' => $session->scheduled_at
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
+            if (!$teacher) {
+                Log::warning('Session created notification skipped: teacher not found', ['session_id' => $session->id]);
+                return;
+            }
 
-        // Notify teacher
-        $this->notificationService->createUserNotification(
-            $teacher->user_id,
-            'New Session Assignment',
-            "You have been assigned a new session '{$session->title}' with {$student->user->name} on " . $session->scheduled_at->format('M d, Y g:i A'),
-            'session',
-            [
-                'session_id' => $session->id,
-                'student_name' => $student->user->name,
-                'session_title' => $session->title,
-                'scheduled_at' => $session->scheduled_at
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
+            $sessionData = $this->buildSessionData($session);
+            $scheduledAt = $session->date && $session->time 
+                ? Carbon::parse($session->date . ' ' . $session->time)->format('M d, Y g:i A')
+                : 'TBD';
 
-        // Notify institute admin if different from teacher
-        if ($institute && $institute->user_id !== $teacher->user_id) {
             $this->notificationService->createUserNotification(
-                $institute->user_id,
+                $teacher->id,
                 'New Session Created',
-                "A new session '{$session->title}' has been created in your institute",
+                "Your session '{$session->title}' has been created successfully for {$scheduledAt}",
                 'session',
-                [
-                    'session_id' => $session->id,
-                    'teacher_name' => $teacher->user->name,
-                    'student_name' => $student->user->name,
-                    'session_title' => $session->title
-                ],
+                $sessionData,
                 route('sessions.show', $session->id),
                 'normal'
             );
-        }
-    }
 
-    /**
-     * Session updated notification
-     */
-    public function sessionUpdated(Session $session, $changes = [])
-    {
-        $teacher = $session->teacher;
-        $student = $session->student;
-
-        $changeMessages = [];
-        foreach ($changes as $field => $value) {
-            switch ($field) {
-                case 'title':
-                    $changeMessages[] = "title changed to '{$value}'";
-                    break;
-                case 'scheduled_at':
-                    $changeMessages[] = "time changed to " . Carbon::parse($value)->format('M d, Y g:i A');
-                    break;
-                case 'status':
-                    $changeMessages[] = "status changed to {$value}";
-                    break;
+            if ($institute && $institute->user_id !== $teacher->id) {
+                $this->notificationService->createUserNotification(
+                    $institute->user_id,
+                    'New Session Created',
+                    "A new session '{$session->title}' has been created by {$teacher->name} in your institute",
+                    'session',
+                    array_merge($sessionData, ['teacher_name' => $teacher->name]),
+                    route('sessions.show', $session->id),
+                    'normal'
+                );
             }
+        } catch (Exception $e) {
+            Log::error('Failed to send session created notification', [
+                'session_id' => $session->id ?? null,
+                'error' => $e->getMessage()
+            ]);
         }
-
-        $changeText = implode(', ', $changeMessages);
-
-        // Notify student
-        $this->notificationService->createUserNotification(
-            $student->user_id,
-            'Session Updated',
-            "Session '{$session->title}' has been updated: {$changeText}",
-            'session',
-            [
-                'session_id' => $session->id,
-                'session_title' => $session->title,
-                'changes' => $changes
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
-
-        // Notify teacher
-        $this->notificationService->createUserNotification(
-            $teacher->user_id,
-            'Session Updated',
-            "Session '{$session->title}' has been updated: {$changeText}",
-            'session',
-            [
-                'session_id' => $session->id,
-                'session_title' => $session->title,
-                'changes' => $changes
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
     }
 
-    /**
-     * Session cancelled notification
-     */
-    public function sessionCancelled(Session $session, $reason = null)
+    public function sessionUpdated(TeacherSession $session, array $changes = []): void
     {
-        $teacher = $session->teacher;
-        $student = $session->student;
-
-        $reasonText = $reason ? " Reason: {$reason}" : '';
-
-        // Notify student
-        $this->notificationService->createUserNotification(
-            $student->user_id,
-            'Session Cancelled',
-            "Session '{$session->title}' with {$teacher->user->name} has been cancelled.{$reasonText}",
-            'session',
-            [
-                'session_id' => $session->id,
-                'teacher_name' => $teacher->user->name,
-                'session_title' => $session->title,
-                'reason' => $reason
-            ],
-            route('sessions.show', $session->id),
-            'high'
-        );
-
-        // Notify teacher
-        $this->notificationService->createUserNotification(
-            $teacher->user_id,
-            'Session Cancelled',
-            "Session '{$session->title}' with {$student->user->name} has been cancelled.{$reasonText}",
-            'session',
-            [
-                'session_id' => $session->id,
-                'student_name' => $student->user->name,
-                'session_title' => $session->title,
-                'reason' => $reason
-            ],
-            route('sessions.show', $session->id),
-            'high'
-        );
-    }
-
-    /**
-     * Session reminder notification
-     */
-    public function sessionReminder(Session $session)
-    {
-        $teacher = $session->teacher;
-        $student = $session->student;
-
-        // Notify student
-        $this->notificationService->createUserNotification(
-            $student->user_id,
-            'Session Reminder',
-            "Reminder: You have a session '{$session->title}' with {$teacher->user->name} in 1 hour",
-            'session',
-            [
-                'session_id' => $session->id,
-                'teacher_name' => $teacher->user->name,
-                'session_title' => $session->title,
-                'scheduled_at' => $session->scheduled_at
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
-
-        // Notify teacher
-        $this->notificationService->createUserNotification(
-            $teacher->user_id,
-            'Session Reminder',
-            "Reminder: You have a session '{$session->title}' with {$student->user->name} in 1 hour",
-            'session',
-            [
-                'session_id' => $session->id,
-                'student_name' => $student->user->name,
-                'session_title' => $session->title,
-                'scheduled_at' => $session->scheduled_at
-            ],
-            route('sessions.show', $session->id),
-            'normal'
-        );
-    }
-
-    // ========================================
-    // SUPPORT TICKET NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Support ticket created notification
-     */
-    public function supportTicketCreated(SupportTicket $ticket)
-    {
-        $user = $ticket->user;
-
-        // Notify user
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Support Ticket Created',
-            "Your support ticket '{$ticket->subject}' has been created successfully. Ticket ID: #{$ticket->id}",
-            'support',
-            [
-                'ticket_id' => $ticket->id,
-                'subject' => $ticket->subject,
-                'priority' => $ticket->priority
-            ],
-            route('support-tickets.show', $ticket->id),
-            'normal'
-        );
-
-        // Notify admins
-        $this->notificationService->createRoleNotification(
-            ['admin'],
-            'New Support Ticket',
-            "New support ticket '{$ticket->subject}' created by {$user->name}. Priority: {$ticket->priority}",
-            'support',
-            [
-                'ticket_id' => $ticket->id,
-                'user_name' => $user->name,
-                'subject' => $ticket->subject,
-                'priority' => $ticket->priority
-            ],
-            route('admin.support-tickets.show', $ticket->id),
-            $ticket->priority === 'high' ? 'high' : 'normal'
-        );
-    }
-
-    /**
-     * Send notification when user account is verified
-     */
-    public function userVerified(User $user)
-    {
-        // Notify user
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Account Verified',
-            "Congratulations! Your account has been verified successfully. You now have full access to all platform features.",
-            'success',
-            ['user_id' => $user->id, 'user_name' => $user->name, 'role' => $user->role],
-            route('dashboard'),
-            'normal'
-        );
-    }
-
-    /**
-     * Send notification when user account is rejected
-     */
-    public function userRejected(User $user, $reason = null)
-    {
-        // Notify user
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Account Verification Update',
-            $reason ? "Your account verification was not approved. Reason: {$reason}" : "Your account verification was not approved. Please contact support for more information.",
-            'warning',
-            ['user_id' => $user->id, 'user_name' => $user->name, 'role' => $user->role, 'reason' => $reason],
-            route('support-tickets.create'),
-            'normal'
-        );
-    }
-
-    /**
-     * Support ticket updated notification
-     */
-    public function supportTicketUpdated(SupportTicket $ticket, $changes = [])
-    {
-        $user = $ticket->user;
-
-        $changeMessages = [];
-        foreach ($changes as $field => $value) {
-            switch ($field) {
-                case 'status':
-                    $changeMessages[] = "status changed to {$value}";
-                    break;
-                case 'priority':
-                    $changeMessages[] = "priority changed to {$value}";
-                    break;
-                case 'assigned_to':
-                    $changeMessages[] = "assigned to " . User::find($value)->name;
-                    break;
+        try {
+            if (empty($changes)) {
+                return;
             }
-        }
 
-        $changeText = implode(', ', $changeMessages);
+            $teacher = $session->teacher;
+            if (!$teacher) {
+                Log::warning('Session updated notification skipped: teacher not found', ['session_id' => $session->id]);
+                return;
+            }
 
-        // Notify user
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Support Ticket Updated',
-            "Your support ticket '{$ticket->subject}' has been updated: {$changeText}",
-            'support',
-            [
-                'ticket_id' => $ticket->id,
-                'subject' => $ticket->subject,
-                'changes' => $changes
-            ],
-            route('support-tickets.show', $ticket->id),
-            'normal'
-        );
-    }
+            $changeText = $this->buildChangeMessage($changes);
+            $sessionData = array_merge($this->buildSessionData($session), ['changes' => $changes]);
 
-    /**
-     * Support ticket replied notification
-     */
-    public function supportTicketReplied(SupportTicket $ticket, $reply)
-    {
-        $user = $ticket->user;
-        $replier = $reply->user;
-
-        // Notify ticket owner
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Support Ticket Reply',
-            "You have received a reply on your support ticket '{$ticket->subject}' from {$replier->name}",
-            'support',
-            [
-                'ticket_id' => $ticket->id,
-                'subject' => $ticket->subject,
-                'replier_name' => $replier->name,
-                'reply_id' => $reply->id
-            ],
-            route('support-tickets.show', $ticket->id),
-            'normal'
-        );
-
-        // Notify other participants (if any)
-        if ($ticket->assigned_to && $ticket->assigned_to !== $replier->id) {
             $this->notificationService->createUserNotification(
-                $ticket->assigned_to,
-                'Support Ticket Reply',
-                "A reply has been added to support ticket '{$ticket->subject}' by {$replier->name}",
-                'support',
-                [
-                    'ticket_id' => $ticket->id,
-                    'subject' => $ticket->subject,
-                    'replier_name' => $replier->name,
-                    'reply_id' => $reply->id
-                ],
-                route('admin.support-tickets.show', $ticket->id),
+                $teacher->id,
+                'Session Updated',
+                "Session '{$session->title}' has been updated: {$changeText}",
+                'session',
+                $sessionData,
+                route('sessions.show', $session->id),
                 'normal'
             );
+
+            if ($session->students) {
+                foreach ($session->students as $student) {
+                    $this->notificationService->createUserNotification(
+                        $student->user_id,
+                        'Session Updated',
+                        "Session '{$session->title}' has been updated: {$changeText}",
+                        'session',
+                        $sessionData,
+                        route('sessions.show', $session->id),
+                        'normal'
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send session updated notification', [
+                'session_id' => $session->id ?? null,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 
-    // ========================================
-    // MESSAGE NOTIFICATIONS
-    // ========================================
-
-    /**
-     * New message notification
-     */
-    public function newMessage(Message $message)
+    public function sessionCancelled(TeacherSession $session, ?string $reason = null): void
     {
-        $sender = $message->sender;
-        $recipient = $message->recipient;
+        try {
+            $teacher = $session->teacher;
+            if (!$teacher) {
+                Log::warning('Session cancelled notification skipped: teacher not found', ['session_id' => $session->id]);
+                return;
+            }
 
-        // Notify recipient
-        $this->notificationService->createUserNotification(
-            $recipient->id,
-            'New Message',
-            "You have received a new message from {$sender->name}: " . substr($message->content, 0, 100) . (strlen($message->content) > 100 ? '...' : ''),
-            'message',
-            [
-                'message_id' => $message->id,
-                'sender_name' => $sender->name,
-                'content_preview' => substr($message->content, 0, 100)
-            ],
-            route('messages.show', $message->id),
-            'normal'
-        );
+            $reasonText = $reason ? " Reason: {$reason}" : '';
+            $sessionData = array_merge($this->buildSessionData($session), ['reason' => $reason]);
+
+            $this->notificationService->createUserNotification(
+                $teacher->id,
+                'Session Cancelled',
+                "Session '{$session->title}' has been cancelled.{$reasonText}",
+                'session',
+                $sessionData,
+                route('sessions.show', $session->id),
+                'high'
+            );
+
+            if ($session->students) {
+                foreach ($session->students as $student) {
+                    $this->notificationService->createUserNotification(
+                        $student->user_id,
+                        'Session Cancelled',
+                        "Session '{$session->title}' with {$teacher->name} has been cancelled.{$reasonText}",
+                        'session',
+                        array_merge($sessionData, ['teacher_name' => $teacher->name]),
+                        route('sessions.show', $session->id),
+                        'high'
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send session cancelled notification', [
+                'session_id' => $session->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    // ========================================
-    // PAYMENT NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Payment successful notification
-     */
-    public function paymentSuccessful(Payment $payment)
+    public function sessionReminder(TeacherSession $session, string $timeUntil = '1 hour'): void
     {
-        $user = $payment->user;
+        try {
+            $teacher = $session->teacher;
+            if (!$teacher) {
+                Log::warning('Session reminder notification skipped: teacher not found', ['session_id' => $session->id]);
+                return;
+            }
 
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Payment Successful',
-            "Your payment of {$payment->currency} {$payment->amount} has been processed successfully. Transaction ID: {$payment->transaction_id}",
-            'payment',
-            [
-                'payment_id' => $payment->id,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'transaction_id' => $payment->transaction_id
-            ],
-            route('payments.show', $payment->id),
-            'normal'
-        );
+            $sessionData = $this->buildSessionData($session);
 
-        // Notify admins for large payments
-        if ($payment->amount > 1000) {
+            $this->notificationService->createUserNotification(
+                $teacher->id,
+                'Session Reminder',
+                "Reminder: You have a session '{$session->title}' in {$timeUntil}",
+                'session',
+                array_merge($sessionData, ['time_until' => $timeUntil]),
+                route('sessions.show', $session->id),
+                'normal'
+            );
+
+            if ($session->students) {
+                foreach ($session->students as $student) {
+                    $this->notificationService->createUserNotification(
+                        $student->user_id,
+                        'Session Reminder',
+                        "Reminder: You have a session '{$session->title}' with {$teacher->name} in {$timeUntil}",
+                        'session',
+                        array_merge($sessionData, ['teacher_name' => $teacher->name, 'time_until' => $timeUntil]),
+                        route('sessions.show', $session->id),
+                        'normal'
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send session reminder notification', [
+                'session_id' => $session->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function supportTicketCreated(SupportTicket $ticket): void
+    {
+        try {
+            $user = $ticket->user;
+            if (!$user) {
+                Log::warning('Support ticket created notification skipped: user not found', ['ticket_id' => $ticket->id]);
+                return;
+            }
+
+            $ticketData = $this->buildTicketData($ticket);
+
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Support Ticket Created',
+                "Your support ticket '{$ticket->subject}' has been created successfully. Ticket ID: #{$ticket->id}",
+                'support',
+                $ticketData,
+                route('support-tickets.show', $ticket->id),
+                'normal'
+            );
+
             $this->notificationService->createRoleNotification(
                 ['admin'],
-                'Large Payment Received',
-                "Large payment of {$payment->currency} {$payment->amount} received from {$user->name}",
-                'payment',
-                [
-                    'payment_id' => $payment->id,
-                    'user_name' => $user->name,
-                    'amount' => $payment->amount,
-                    'currency' => $payment->currency
-                ],
-                route('admin.payments.show', $payment->id),
-                'normal'
+                'New Support Ticket',
+                "New support ticket '{$ticket->subject}' created by {$user->name}. Priority: {$ticket->priority}",
+                'support',
+                array_merge($ticketData, ['user_name' => $user->name]),
+                route('admin.support-tickets.show', $ticket->id),
+                $this->mapPriority($ticket->priority)
             );
+        } catch (Exception $e) {
+            Log::error('Failed to send support ticket created notification', [
+                'ticket_id' => $ticket->id ?? null,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 
-    /**
-     * Payment failed notification
-     */
-    public function paymentFailed(Payment $payment, $reason = null)
+    public function userVerified(User $user): void
     {
-        $user = $payment->user;
-
-        $reasonText = $reason ? " Reason: {$reason}" : '';
-
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Payment Failed',
-            "Your payment of {$payment->currency} {$payment->amount} has failed.{$reasonText}",
-            'payment',
-            [
-                'payment_id' => $payment->id,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'reason' => $reason
-            ],
-            route('payments.show', $payment->id),
-            'high'
-        );
+        try {
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Account Verified',
+                "Congratulations! Your account has been verified successfully. You now have full access to all platform features.",
+                'account',
+                [
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'role' => $user->role,
+                    'verified_at' => now()
+                ],
+                route('dashboard'),
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send user verified notification', [
+                'user_id' => $user->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    // ========================================
-    // REVIEW NOTIFICATIONS
-    // ========================================
-
-    /**
-     * New review notification
-     */
-    public function newReview(Review $review)
+    public function userRejected(User $user, ?string $reason = null): void
     {
-        $reviewer = $review->user;
-        $teacher = $review->teacher;
+        try {
+            $message = $reason 
+                ? "Your account verification was not approved. Reason: {$reason}" 
+                : "Your account verification was not approved. Please contact support for more information.";
 
-        // Notify teacher
-        $this->notificationService->createUserNotification(
-            $teacher->user_id,
-            'New Review Received',
-            "You have received a new {$review->rating}-star review from {$reviewer->name}",
-            'review',
-            [
-                'review_id' => $review->id,
-                'reviewer_name' => $reviewer->name,
-                'rating' => $review->rating,
-                'comment' => substr($review->comment, 0, 100)
-            ],
-            route('reviews.show', $review->id),
-            'normal'
-        );
-
-        // Notify institute if different from teacher
-        if ($teacher->institute && $teacher->institute->user_id !== $teacher->user_id) {
             $this->notificationService->createUserNotification(
-                $teacher->institute->user_id,
-                'New Teacher Review',
-                "{$teacher->user->name} has received a new {$review->rating}-star review from {$reviewer->name}",
-                'review',
+                $user->id,
+                'Account Verification Update',
+                $message,
+                'account',
                 [
-                    'review_id' => $review->id,
-                    'teacher_name' => $teacher->user->name,
-                    'reviewer_name' => $reviewer->name,
-                    'rating' => $review->rating
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'role' => $user->role,
+                    'reason' => $reason,
+                    'rejected_at' => now()
                 ],
+                route('support-tickets.create'),
+                'high'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send user rejected notification', [
+                'user_id' => $user->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function supportTicketUpdated(SupportTicket $ticket, array $changes = []): void
+    {
+        try {
+            if (empty($changes)) {
+                return;
+            }
+
+            $user = $ticket->user;
+            if (!$user) {
+                Log::warning('Support ticket updated notification skipped: user not found', ['ticket_id' => $ticket->id]);
+                return;
+            }
+
+            $changeText = $this->buildTicketChangeMessage($changes);
+            $ticketData = array_merge($this->buildTicketData($ticket), ['changes' => $changes]);
+
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Support Ticket Updated',
+                "Your support ticket '{$ticket->subject}' has been updated: {$changeText}",
+                'support',
+                $ticketData,
+                route('support-tickets.show', $ticket->id),
+                'normal'
+            );
+
+            if (isset($changes['assigned_to']) && $changes['assigned_to']) {
+                $assignee = User::find($changes['assigned_to']);
+                if ($assignee) {
+                    $this->notificationService->createUserNotification(
+                        $assignee->id,
+                        'Support Ticket Assigned',
+                        "Support ticket '{$ticket->subject}' has been assigned to you",
+                        'support',
+                        $ticketData,
+                        route('admin.support-tickets.show', $ticket->id),
+                        'normal'
+                    );
+                }
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send support ticket updated notification', [
+                'ticket_id' => $ticket->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function supportTicketReplied(SupportTicket $ticket, $reply): void
+    {
+        try {
+            $user = $ticket->user;
+            $replier = $reply->user ?? null;
+
+            if (!$user || !$replier) {
+                Log::warning('Support ticket replied notification skipped: user or replier not found', [
+                    'ticket_id' => $ticket->id,
+                    'reply_id' => $reply->id ?? null
+                ]);
+                return;
+            }
+
+            $ticketData = array_merge($this->buildTicketData($ticket), [
+                'replier_name' => $replier->name,
+                'reply_id' => $reply->id
+            ]);
+
+            if ($user->id !== $replier->id) {
+                $this->notificationService->createUserNotification(
+                    $user->id,
+                    'Support Ticket Reply',
+                    "You have received a reply on your support ticket '{$ticket->subject}' from {$replier->name}",
+                    'support',
+                    $ticketData,
+                    route('support-tickets.show', $ticket->id),
+                    'normal'
+                );
+            }
+
+            if ($ticket->assigned_to && $ticket->assigned_to !== $replier->id && $ticket->assigned_to !== $user->id) {
+                $this->notificationService->createUserNotification(
+                    $ticket->assigned_to,
+                    'Support Ticket Reply',
+                    "A reply has been added to support ticket '{$ticket->subject}' by {$replier->name}",
+                    'support',
+                    $ticketData,
+                    route('admin.support-tickets.show', $ticket->id),
+                    'normal'
+                );
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send support ticket replied notification', [
+                'ticket_id' => $ticket->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function newMessage(Message $message): void
+    {
+        try {
+            $sender = $message->sender;
+            $recipient = $message->recipient;
+
+            if (!$sender || !$recipient) {
+                Log::warning('New message notification skipped: sender or recipient not found', ['message_id' => $message->id]);
+                return;
+            }
+
+            $contentPreview = $this->truncateText($message->content, 100);
+
+            $this->notificationService->createUserNotification(
+                $recipient->id,
+                'New Message',
+                "You have received a new message from {$sender->name}: {$contentPreview}",
+                'message',
+                [
+                    'message_id' => $message->id,
+                    'sender_id' => $sender->id,
+                    'sender_name' => $sender->name,
+                    'content_preview' => $contentPreview,
+                    'sent_at' => $message->created_at ?? now()
+                ],
+                route('messages.show', $message->id),
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send new message notification', [
+                'message_id' => $message->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function paymentSuccessful(Payment $payment, float $largePaymentThreshold = 1000.0): void
+    {
+        try {
+            $user = $payment->user;
+            if (!$user) {
+                Log::warning('Payment successful notification skipped: user not found', ['payment_id' => $payment->id]);
+                return;
+            }
+
+            $paymentData = $this->buildPaymentData($payment);
+
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Payment Successful',
+                "Your payment of {$payment->currency} {$payment->amount} has been processed successfully. Transaction ID: {$payment->transaction_id}",
+                'payment',
+                $paymentData,
+                route('payments.show', $payment->id),
+                'normal'
+            );
+
+            if ($payment->amount > $largePaymentThreshold) {
+                $this->notificationService->createRoleNotification(
+                    ['admin'],
+                    'Large Payment Received',
+                    "Large payment of {$payment->currency} {$payment->amount} received from {$user->name}",
+                    'payment',
+                    array_merge($paymentData, ['user_name' => $user->name]),
+                    route('admin.payments.show', $payment->id),
+                    'normal'
+                );
+            }
+        } catch (Exception $e) {
+            Log::error('Failed to send payment successful notification', [
+                'payment_id' => $payment->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function paymentFailed(Payment $payment, ?string $reason = null): void
+    {
+        try {
+            $user = $payment->user;
+            if (!$user) {
+                Log::warning('Payment failed notification skipped: user not found', ['payment_id' => $payment->id]);
+                return;
+            }
+
+            $reasonText = $reason ? " Reason: {$reason}" : '';
+            $paymentData = array_merge($this->buildPaymentData($payment), ['reason' => $reason]);
+
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Payment Failed',
+                "Your payment of {$payment->currency} {$payment->amount} has failed.{$reasonText}",
+                'payment',
+                $paymentData,
+                route('payments.show', $payment->id),
+                'high'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send payment failed notification', [
+                'payment_id' => $payment->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function newReview(Review $review): void
+    {
+        try {
+            $reviewer = $review->user;
+            $teacher = $review->teacher;
+
+            if (!$reviewer || !$teacher) {
+                Log::warning('New review notification skipped: reviewer or teacher not found', ['review_id' => $review->id]);
+                return;
+            }
+
+            $reviewData = $this->buildReviewData($review);
+
+            $this->notificationService->createUserNotification(
+                $teacher->user_id,
+                'New Review Received',
+                "You have received a new {$review->rating}-star review from {$reviewer->name}",
+                'review',
+                $reviewData,
                 route('reviews.show', $review->id),
                 'normal'
             );
-        }
-    }
 
-    // ========================================
-    // USER PROFILE NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Profile updated notification
-     */
-    public function profileUpdated(User $user, $changes = [])
-    {
-        $changeMessages = [];
-        foreach ($changes as $field => $value) {
-            switch ($field) {
-                case 'name':
-                    $changeMessages[] = "name updated";
-                    break;
-                case 'email':
-                    $changeMessages[] = "email updated";
-                    break;
-                case 'phone':
-                    $changeMessages[] = "phone number updated";
-                    break;
-                case 'avatar':
-                    $changeMessages[] = "profile picture updated";
-                    break;
+            if ($teacher->institute && $teacher->institute->user_id !== $teacher->user_id) {
+                $this->notificationService->createUserNotification(
+                    $teacher->institute->user_id,
+                    'New Teacher Review',
+                    "{$teacher->user->name} has received a new {$review->rating}-star review from {$reviewer->name}",
+                    'review',
+                    array_merge($reviewData, ['teacher_name' => $teacher->user->name]),
+                    route('reviews.show', $review->id),
+                    'normal'
+                );
             }
+        } catch (Exception $e) {
+            Log::error('Failed to send new review notification', [
+                'review_id' => $review->id ?? null,
+                'error' => $e->getMessage()
+            ]);
         }
-
-        $changeText = implode(', ', $changeMessages);
-
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Profile Updated',
-            "Your profile has been updated: {$changeText}",
-            'profile',
-            [
-                'user_id' => $user->id,
-                'changes' => $changes
-            ],
-            route('dashboard.profile'),
-            'low'
-        );
     }
 
-    /**
-     * Account verification notification
-     */
-    public function accountVerified(User $user)
-    {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Account Verified',
-            'Your account has been successfully verified. You now have full access to all features.',
-            'account',
-            [
-                'user_id' => $user->id,
-                'verified_at' => now()
-            ],
-            route('dashboard'),
-            'normal'
-        );
-    }
 
-    /**
-     * Password changed notification
-     */
-    public function passwordChanged(User $user)
+    public function teacherJoinedInstitute(TeacherProfile $teacher, Institute $institute): void
     {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Password Changed',
-            'Your password has been successfully changed. If you did not make this change, please contact support immediately.',
-            'security',
-            [
-                'user_id' => $user->id,
-                'changed_at' => now()
-            ],
-            route('dashboard.profile'),
-            'high'
-        );
-    }
+        try {
+            $teacherUser = $teacher->user;
+            if (!$teacherUser) {
+                Log::warning('Teacher joined institute notification skipped: teacher user not found', [
+                    'teacher_id' => $teacher->id,
+                    'institute_id' => $institute->id
+                ]);
+                return;
+            }
 
-    /**
-     * Password reset notification
-     */
-    public function passwordReset(User $user, $additionalInfo = [])
-    {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Password Reset',
-            'Your password has been reset successfully. If you did not request this reset, please contact support immediately.',
-            'security',
-            array_merge([
-                'user_id' => $user->id,
-                'reset_at' => now(),
-                'ip_address' => Request::ip(),
-                'user_agent' => Request::userAgent(),
-                'location' => $this->getLocationFromIP(Request::ip())
-            ], $additionalInfo),
-            route('dashboard.profile'),
-            'high'
-        );
-    }
-
-    // ========================================
-    // INSTITUTE NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Teacher joined institute notification
-     */
-    public function teacherJoinedInstitute(TeacherProfile $teacher, Institute $institute)
-    {
-        // Notify institute admin
-        $this->notificationService->createUserNotification(
-            $institute->user_id,
-            'New Teacher Joined',
-            "{$teacher->user->name} has joined your institute as a teacher",
-            'institute',
-            [
+            $instituteData = [
                 'teacher_id' => $teacher->id,
-                'teacher_name' => $teacher->user->name,
-                'institute_id' => $institute->id
-            ],
-            route('institute.teachers.show', $teacher->id),
-            'normal'
-        );
-
-        // Notify admins
-        $this->notificationService->createRoleNotification(
-            ['admin'],
-            'Teacher Joined Institute',
-            "{$teacher->user->name} has joined {$institute->name} as a teacher",
-            'institute',
-            [
-                'teacher_id' => $teacher->id,
-                'teacher_name' => $teacher->user->name,
+                'teacher_name' => $teacherUser->name,
                 'institute_id' => $institute->id,
-                'institute_name' => $institute->name
-            ],
-            route('admin.users.show', $teacher->user_id),
-            'normal'
-        );
+                'institute_name' => $institute->name,
+                'joined_at' => now()
+            ];
+
+            $this->notificationService->createUserNotification(
+                $institute->user_id,
+                'New Teacher Joined',
+                "{$teacherUser->name} has joined your institute as a teacher",
+                'institute',
+                $instituteData,
+                route('institute.teachers.show', $teacher->id),
+                'normal'
+            );
+
+            $this->notificationService->createRoleNotification(
+                ['admin'],
+                'Teacher Joined Institute',
+                "{$teacherUser->name} has joined {$institute->name} as a teacher",
+                'institute',
+                $instituteData,
+                route('admin.users.show', $teacher->user_id),
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send teacher joined institute notification', [
+                'teacher_id' => $teacher->id ?? null,
+                'institute_id' => $institute->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    /**
-     * Student enrolled notification
-     */
-    public function studentEnrolled(StudentProfile $student, Institute $institute)
+    public function studentEnrolled(StudentProfile $student, Institute $institute): void
     {
-        // Notify institute admin
-        $this->notificationService->createUserNotification(
-            $institute->user_id,
-            'New Student Enrolled',
-            "{$student->user->name} has enrolled in your institute",
-            'institute',
-            [
-                'student_id' => $student->id,
-                'student_name' => $student->user->name,
-                'institute_id' => $institute->id
-            ],
-            route('institute.students.show', $student->id),
-            'normal'
-        );
+        try {
+            $studentUser = $student->user;
+            if (!$studentUser) {
+                Log::warning('Student enrolled notification skipped: student user not found', [
+                    'student_id' => $student->id,
+                    'institute_id' => $institute->id
+                ]);
+                return;
+            }
 
-        // Notify student
-        $this->notificationService->createUserNotification(
-            $student->user_id,
-            'Enrollment Successful',
-            "You have successfully enrolled in {$institute->name}",
-            'institute',
-            [
+            $enrollmentData = [
                 'student_id' => $student->id,
+                'student_name' => $studentUser->name,
                 'institute_id' => $institute->id,
-                'institute_name' => $institute->name
-            ],
-            route('student.dashboard'),
-            'normal'
-        );
+                'institute_name' => $institute->name,
+                'enrolled_at' => now()
+            ];
+
+            $this->notificationService->createUserNotification(
+                $institute->user_id,
+                'New Student Enrolled',
+                "{$studentUser->name} has enrolled in your institute",
+                'institute',
+                $enrollmentData,
+                route('institute.students.show', $student->id),
+                'normal'
+            );
+
+            $this->notificationService->createUserNotification(
+                $student->user_id,
+                'Enrollment Successful',
+                "You have successfully enrolled in {$institute->name}",
+                'institute',
+                $enrollmentData,
+                route('student.dashboard'),
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send student enrolled notification', [
+                'student_id' => $student->id ?? null,
+                'institute_id' => $institute->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    // ========================================
-    // SYSTEM NOTIFICATIONS
-    // ========================================
-
-    /**
-     * System maintenance notification
-     */
-    public function systemMaintenance($scheduledAt, $duration, $description = null)
+    public function systemMaintenance(string $scheduledAt, string $duration, ?string $description = null): void
     {
-        $this->notificationService->createGlobalNotification(
-            'System Maintenance Scheduled',
-            "System maintenance is scheduled for " . Carbon::parse($scheduledAt)->format('M d, Y g:i A') . " for {$duration}. " . ($description ? $description : ''),
-            'system',
-            [
-                'scheduled_at' => $scheduledAt,
-                'duration' => $duration,
-                'description' => $description
-            ],
-            route('maintenance.info'),
-            'high'
-        );
+        try {
+            $formattedDate = Carbon::parse($scheduledAt)->format('M d, Y g:i A');
+            $message = "System maintenance is scheduled for {$formattedDate} for {$duration}.";
+            
+            if ($description) {
+                $message .= " {$description}";
+            }
+
+            $this->notificationService->createRoleNotification(
+                ['admin', 'teacher', 'student', 'institute'],
+                'System Maintenance Scheduled',
+                $message,
+                'system',
+                [
+                    'scheduled_at' => $scheduledAt,
+                    'duration' => $duration,
+                    'description' => $description,
+                    'announced_at' => now()
+                ],
+                route('maintenance.info'),
+                'high'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send system maintenance notification', [
+                'scheduled_at' => $scheduledAt ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    /**
-     * New feature notification
-     */
-    public function newFeature($featureName, $description, $actionUrl = null)
+    public function newFeature(string $featureName, string $description, ?string $actionUrl = null): void
     {
-        $this->notificationService->createGlobalNotification(
-            'New Feature Available',
-            "New feature '{$featureName}' is now available! {$description}",
-            'feature',
-            [
-                'feature_name' => $featureName,
-                'description' => $description
-            ],
-            $actionUrl,
-            'normal'
-        );
+        try {
+            $this->notificationService->createRoleNotification(
+                ['admin', 'teacher', 'student', 'institute'],
+                'New Feature Available',
+                "New feature '{$featureName}' is now available! {$description}",
+                'feature',
+                [
+                    'feature_name' => $featureName,
+                    'description' => $description,
+                    'announced_at' => now()
+                ],
+                $actionUrl,
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send new feature notification', [
+                'feature_name' => $featureName ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    /**
-     * Security alert notification
-     */
-    public function securityAlert(User $user, $alertType, $description)
+    public function securityAlert(User $user, string $alertType, string $description): void
     {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Security Alert',
-            "Security alert: {$description}",
-            'security',
-            [
-                'user_id' => $user->id,
-                'alert_type' => $alertType,
-                'description' => $description
-            ],
-            route('dashboard.profile'),
-            'high'
-        );
+        try {
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Security Alert',
+                "Security alert: {$description}",
+                'security',
+                [
+                    'user_id' => $user->id,
+                    'alert_type' => $alertType,
+                    'description' => $description,
+                    'alerted_at' => now()
+                ],
+                route('dashboard.profile'),
+                'high'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send security alert notification', [
+                'user_id' => $user->id ?? null,
+                'alert_type' => $alertType ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    // ========================================
-    // SCHEDULED NOTIFICATIONS
-    // ========================================
-
-    /**
-     * Daily summary notification
-     */
-    public function dailySummary(User $user, $summary)
+    public function dailySummary(User $user, string $summary): void
     {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Daily Summary',
-            $summary,
-            'summary',
-            [
-                'user_id' => $user->id,
-                'date' => now()->format('Y-m-d'),
-                'summary' => $summary
-            ],
-            route('dashboard'),
-            'low'
-        );
+        try {
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Daily Summary',
+                $summary,
+                'summary',
+                [
+                    'user_id' => $user->id,
+                    'date' => now()->format('Y-m-d'),
+                    'summary' => $summary,
+                    'generated_at' => now()
+                ],
+                route('dashboard'),
+                'low'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send daily summary notification', [
+                'user_id' => $user->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    /**
-     * Weekly report notification
-     */
-    public function weeklyReport(User $user, $report)
+    public function weeklyReport(User $user, string $report): void
     {
-        $this->notificationService->createUserNotification(
-            $user->id,
-            'Weekly Report',
-            $report,
-            'report',
-            [
-                'user_id' => $user->id,
-                'week' => now()->format('Y-W'),
-                'report' => $report
-            ],
-            route('reports.weekly'),
-            'normal'
-        );
+        try {
+            $this->notificationService->createUserNotification(
+                $user->id,
+                'Weekly Report',
+                $report,
+                'report',
+                [
+                    'user_id' => $user->id,
+                    'week' => now()->format('Y-W'),
+                    'report' => $report,
+                    'generated_at' => now()
+                ],
+                route('reports.weekly'),
+                'normal'
+            );
+        } catch (Exception $e) {
+            Log::error('Failed to send weekly report notification', [
+                'user_id' => $user->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
-    // ========================================
-    // UTILITY METHODS
-    // ========================================
-
-    /**
-     * Get notification statistics for a user
-     */
-    public function getUserStats(User $user)
+    protected function buildSessionData(TeacherSession $session): array
     {
         return [
-            'total' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->count(),
-            'unread' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereNull('read_at')
-                ->count(),
-            'read' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereNotNull('read_at')
-                ->count(),
-            'high_priority' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereJsonContains('data->priority', 'high')
-                ->count(),
-            'today' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereDate('created_at', today())
-                ->count(),
-            'this_week' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
-                ->count(),
-            'this_month' => Notification::where('notifiable_type', User::class)
-                ->where('notifiable_id', $user->id)
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->count(),
+            'session_id' => $session->id,
+            'session_title' => $session->title,
+            'session_type' => $session->type,
+            'scheduled_date' => $session->date,
+            'scheduled_time' => $session->time,
+            'duration' => $session->duration,
+            'price' => $session->price,
+            'status' => $session->status
         ];
     }
 
-    /**
-     * Clean up old notifications
-     */
-    public function cleanupOldNotifications($days = 90)
+    protected function buildTicketData(SupportTicket $ticket): array
     {
-        $cutoffDate = now()->subDays($days);
-        
-        $deletedCount = Notification::where('created_at', '<', $cutoffDate)
-            ->whereNotNull('read_at')
-            ->delete();
-
-        Log::info("Cleaned up {$deletedCount} old notifications older than {$days} days");
-        
-        return $deletedCount;
+        return [
+            'ticket_id' => $ticket->id,
+            'subject' => $ticket->subject,
+            'priority' => $ticket->priority,
+            'status' => $ticket->status,
+            'category' => $ticket->category ?? null
+        ];
     }
 
-    /**
-     * Get location from IP address (requires external service)
-     */
-    protected function getLocationFromIP($ip)
+    protected function buildPaymentData(Payment $payment): array
     {
-        // This is a placeholder. In a real application, you would use a service
-        // like IP2Location, MaxMind, or a similar geolocation API.
-        // For demonstration, we'll return a placeholder.
-        return "IP: {$ip}";
+        return [
+            'payment_id' => $payment->id,
+            'amount' => $payment->amount,
+            'currency' => $payment->currency,
+            'transaction_id' => $payment->transaction_id,
+            'status' => $payment->status,
+            'payment_method' => $payment->payment_method ?? null
+        ];
+    }
+
+    protected function buildReviewData(Review $review): array
+    {
+        return [
+            'review_id' => $review->id,
+            'reviewer_name' => $review->user->name ?? 'Unknown',
+            'rating' => $review->rating,
+            'comment' => $this->truncateText($review->comment ?? '', 100),
+            'created_at' => $review->created_at
+        ];
+    }
+
+    protected function buildChangeMessage(array $changes): string
+    {
+        $changeMessages = [];
+        foreach ($changes as $field => $value) {
+            $changeMessages[] = match ($field) {
+                'title' => "title changed to '{$value}'",
+                'date' => "date changed to " . Carbon::parse($value)->format('M d, Y'),
+                'time' => "time changed to " . Carbon::parse($value)->format('g:i A'),
+                'status' => "status changed to {$value}",
+                'price' => "price changed to {$value}",
+                default => "{$field} updated"
+            };
+        }
+
+        return implode(', ', $changeMessages);
+    }
+
+    protected function buildTicketChangeMessage(array $changes): string
+    {
+        $changeMessages = [];
+        foreach ($changes as $field => $value) {
+            $changeMessages[] = match ($field) {
+                'status' => "status changed to {$value}",
+                'priority' => "priority changed to {$value}",
+                'assigned_to' => "assigned to " . (User::find($value)?->name ?? 'staff'),
+                'category' => "category changed to {$value}",
+                default => "{$field} updated"
+            };
+        }
+
+        return implode(', ', $changeMessages);
+    }
+
+    protected function truncateText(string $text, int $length = 100): string
+    {
+        return strlen($text) > $length 
+            ? substr($text, 0, $length) . '...' 
+            : $text;
+    }
+
+    protected function mapPriority(string $priority): string
+    {
+        return match (strtolower($priority)) {
+            'high', 'urgent', 'critical' => 'high',
+            'low' => 'low',
+            default => 'normal'
+        };
     }
 } 
