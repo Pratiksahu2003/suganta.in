@@ -93,6 +93,7 @@ Route::prefix('v1')->group(function (): void {
     // Lead Routes (auth user's own leads and created leads only)
     Route::middleware('auth:sanctum')->prefix('leads')->controller(LeadController::class)->group(function () {
         Route::get('/', 'index');
+        Route::post('/', 'store');
         Route::get('{lead}', 'show');
     });
 });

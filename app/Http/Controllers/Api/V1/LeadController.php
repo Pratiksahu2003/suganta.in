@@ -7,9 +7,47 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class LeadController extends BaseApiController
 {
+    /**
+     * Create a new lead (auth user ID stored in user_id).
+     */
+    public function store(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:30'],
+            'type' => ['nullable', 'string', Rule::in(['student', 'parent', 'institute', 'teacher'])],
+            'source' => ['nullable', 'string', Rule::in(['website', 'social_media', 'referral', 'advertisement', 'direct'])],
+            'subject_interest' => ['nullable', 'string', 'max:255'],
+            'grade_level' => ['nullable', 'string', 'max:100'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'message' => ['nullable', 'string', 'max:5000'],
+            'status' => ['nullable', 'string', Rule::in(['new', 'contacted', 'qualified', 'converted', 'closed'])],
+            'priority' => ['nullable', 'string', Rule::in(['low', 'medium', 'high', 'urgent'])],
+            'lead_owner_id' => ['required', 'integer', 'exists:users,id'],
+            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
+            'estimated_value' => ['nullable', 'numeric', 'min:0'],
+            'utm_source' => ['nullable', 'string', 'max:255'],
+            'utm_medium' => ['nullable', 'string', 'max:255'],
+            'utm_campaign' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $lead = Lead::create(array_merge($validated, [
+            'user_id' => $user->id,
+        ]));
+
+        $lead->load(['user:id,name,email', 'leadOwner:id,name,email', 'assignedTo:id,name,email']);
+
+        return $this->created($lead->toArray(), 'Lead created successfully.');
+    }
+
     /**
      * Get authenticated user's leads only.
      * Returns leads owned by, assigned to, or created by the auth user.
