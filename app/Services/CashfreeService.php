@@ -195,7 +195,8 @@ class CashfreeService
         // Prefer official Cashfree SDK when available (guaranteed algorithm match)
         if (class_exists(\Cashfree\Cashfree::class)) {
             try {
-                $env = $this->isProduction ? \Cashfree\Cashfree::PRODUCTION : \Cashfree\Cashfree::SANDBOX;
+                // SDK uses 0 = SANDBOX, 1 = PRODUCTION (instance props, not constants)
+                $env = $this->isProduction ? 1 : 0;
                 $cashfree = new \Cashfree\Cashfree($env, $this->appId, $secret, '', '', '', false);
                 $cashfree->PGVerifyWebhookSignature($signature, $rawBody, $timestamp);
                 return true;
