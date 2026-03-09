@@ -7,17 +7,30 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Preserve the raw request body for webhook signature verification.
+ * Preserve the raw request body for Cashfree webhook signature verification.
  *
- * Must run before any middleware that parses the body. Stores the raw content
- * so the webhook controller can verify Cashfree's HMAC against the exact bytes
- * received, not a re-encoded or modified version.
+ * Cashfree requires the EXACT raw payload bytes for HMAC verification.
+ * Uses file_get_contents('php://input') when possible — per Cashfree docs,
+ * this must be read BEFORE any framework parsing.
+ *
+ * @see https://www.cashfree.com/docs/payments/online/webhooks/signature-verification
  */
 class PreserveRawBodyForWebhook
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $request->attributes->set('raw_body', $request->getContent());
+        if (!$request->is('api/v1/payment/webhook')) {
+            return $next($request);
+        }
+
+        // Read raw body BEFORE any consumption — php://input can only be read once.
+        // If already exhausted (e.g. Symfony read it), fall back to getContent().
+        $rawBody = file_get_contents('php://input');
+        if ($rawBody === false || $rawBody === '') {
+            $rawBody = $request->getContent();
+        }
+
+        $request->attributes->set('raw_body', $rawBody);
 
         return $next($request);
     }
