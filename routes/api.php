@@ -77,10 +77,11 @@ Route::prefix('v1')->group(function (): void {
         Route::get('{supportTicket}/replies/{reply}/attachment', [SupportTicketController::class, 'downloadReplyAttachment']);
     });
 
-    // Payment — public routes (Cashfree callbacks / webhooks, no auth required)
+    // Payment — public routes (Cashfree callbacks / webhooks / checkout proxy, no auth required)
     Route::controller(PaymentController::class)->prefix('payment')->group(function () {
-        Route::get('callback', 'callback');
-        Route::post('webhook', 'webhook');
+        Route::get('checkout', 'checkout');   // proxy: always gives a fresh Cashfree redirect
+        Route::get('callback', 'callback');   // Cashfree return URL after checkout
+        Route::post('webhook', 'webhook');    // Cashfree server-to-server webhook
     });
 
     // Payment Routes (auth user's data only)

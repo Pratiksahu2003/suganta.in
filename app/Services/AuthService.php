@@ -177,11 +177,12 @@ class AuthService
                 $paymentResult = $this->registrationPaymentService->getOrCreateCheckoutUrl($user, 'api');
 
                 if (!empty($paymentResult['checkout_url'])) {
+                    $orderId = $paymentResult['order_id'] ?? '';
                     return [
                         'requires_registration_payment' => true,
-                        'payment_link'                  => $paymentResult['checkout_url'],
+                        'payment_link'                  => $this->buildProxyPaymentUrl($orderId),
                         'payment_session_id'            => $paymentResult['payment_session_id'] ?? null,
-                        'order_id'                      => $paymentResult['order_id'] ?? null,
+                        'order_id'                      => $orderId,
                         'actual_price'                  => $paymentResult['actual_price'] ?? null,
                         'discounted_price'              => $paymentResult['discounted_price'] ?? null,
                         'description'                   => $paymentResult['description'] ?? null,
@@ -357,11 +358,12 @@ class AuthService
             $paymentResult = $this->registrationPaymentService->getOrCreateCheckoutUrl($user, 'api');
 
             if (!empty($paymentResult['checkout_url'])) {
+                $orderId = $paymentResult['order_id'] ?? '';
                 return [
                     'requires_registration_payment' => true,
-                    'payment_link'                  => $paymentResult['checkout_url'],
+                    'payment_link'                  => $this->buildProxyPaymentUrl($orderId),
                     'payment_session_id'            => $paymentResult['payment_session_id'] ?? null,
-                    'order_id'                      => $paymentResult['order_id'] ?? null,
+                    'order_id'                      => $orderId,
                     'actual_price'                  => $paymentResult['actual_price'] ?? null,
                     'discounted_price'              => $paymentResult['discounted_price'] ?? null,
                     'description'                   => $paymentResult['description'] ?? null,
@@ -541,5 +543,26 @@ class AuthService
     private function checkNewDevice(User $user): void
     {
         // Implementation for device checking
+    }
+
+    /**
+     * Build the proxy checkout URL for a given order.
+     *
+     * Points to OUR endpoint (not directly to Cashfree) so that the link
+     * never expires — every click triggers a fresh Cashfree session lookup.
+     *
+     * Strips any path component from APP_URL so doubled segments like
+     * "/api/v1/api/v1" cannot occur if APP_URL is misconfigured.
+     */
+    private function buildProxyPaymentUrl(string $orderId): string
+    {
+        $parsed  = parse_url(rtrim(config('app.url', 'http://localhost'), '/'));
+        $baseUrl = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? 'localhost');
+
+        if (!empty($parsed['port'])) {
+            $baseUrl .= ':' . $parsed['port'];
+        }
+
+        return $baseUrl . '/api/v1/payment/checkout?order_id=' . $orderId;
     }
 }

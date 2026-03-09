@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\CashfreeService;
 use App\Services\RegistrationPaymentService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -93,6 +94,81 @@ class PaymentController extends BaseApiController
             'invoice_url' => $invoiceUrl,
             'expires_at'  => now()->addDays(config('invoice.expires_days', 7))->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Proxy endpoint: always resolves a fresh Cashfree checkout session and redirects
+     * the browser to Cashfree's hosted payment page.
+     *
+     * By pointing payment links here instead of directly to Cashfree, the links
+     * we hand out to users NEVER expire:
+     *   - If the Cashfree session is still ACTIVE   → redirect immediately.
+     *   - If the Cashfree session has EXPIRED       → create a new order, then redirect.
+     *   - If the payment is already SUCCESS         → return a 200 "already paid" JSON.
+     *   - If the payment is CANCELLED / REFUNDED    → return a 410 Gone.
+     *
+     * Route: GET /api/v1/payment/checkout   (public — no auth)
+     */
+    public function checkout(Request $request): RedirectResponse|JsonResponse
+    {
+        $orderId = $request->query('order_id');
+
+        if (!$orderId) {
+            return $this->error('Missing order_id parameter.', Response::HTTP_BAD_REQUEST);
+        }
+
+        $payment = Payment::where('order_id', $orderId)->first();
+
+        if (!$payment) {
+            return $this->notFound('Payment not found.');
+        }
+
+        if ($payment->status === 'success') {
+            return $this->success('This payment has already been completed.', [
+                'order_id' => $orderId,
+                'status'   => 'success',
+            ]);
+        }
+
+        if (in_array($payment->status, ['cancelled', 'refunded'], true)) {
+            return $this->error(
+                'This payment link is no longer valid.',
+                Response::HTTP_GONE
+            );
+        }
+
+        try {
+            $checkoutUrl = $this->registrationPaymentService->getFreshCheckoutUrl($payment);
+
+            if (!$checkoutUrl) {
+                // getFreshCheckoutUrl returns null only when the payment was just completed
+                $payment->refresh();
+                if ($payment->status === 'success') {
+                    return $this->success('Payment already completed.', [
+                        'order_id' => $orderId,
+                        'status'   => 'success',
+                    ]);
+                }
+
+                return $this->error(
+                    'Unable to load the payment page. Please log in and try again.',
+                    Response::HTTP_SERVICE_UNAVAILABLE
+                );
+            }
+
+            // Redirect the user's browser directly to Cashfree's hosted checkout page
+            return redirect()->away($checkoutUrl);
+        } catch (\Exception $e) {
+            Log::error('Payment checkout proxy failed', [
+                'order_id' => $orderId,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return $this->error(
+                'Unable to load the payment page. Please try again.',
+                Response::HTTP_SERVICE_UNAVAILABLE
+            );
+        }
     }
 
     /**

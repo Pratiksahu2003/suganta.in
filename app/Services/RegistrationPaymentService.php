@@ -299,6 +299,62 @@ class RegistrationPaymentService
         return true;
     }
 
+    /**
+     * Get a guaranteed-fresh Cashfree checkout URL for an existing Payment record.
+     *
+     * Called by the proxy checkout endpoint so that any payment link we hand
+     * out never goes stale:
+     *   1. Verify the order is still ACTIVE on Cashfree.
+     *   2. If expired/not found → mark failed, create a brand-new order.
+     *   3. Returns the direct Cashfree hosted-checkout URL, or null when the
+     *      payment has already been completed.
+     */
+    public function getFreshCheckoutUrl(Payment $payment): ?string
+    {
+        // ── Step 1: verify with Cashfree ──────────────────────────────────────
+        try {
+            $freshOrder  = $this->cashfree->getOrder($payment->order_id);
+            $orderStatus = strtoupper($freshOrder['order_status'] ?? '');
+
+            // Race condition: paid between requests — activate user
+            if ($this->cashfree->isOrderPaid($freshOrder)) {
+                $this->handlePaymentSuccess($payment->order_id, []);
+                return null;
+            }
+
+            if ($orderStatus === 'ACTIVE') {
+                // Order still live — persist the refreshed session and return URL
+                $payment->update(['gateway_response' => $freshOrder]);
+                return $this->cashfree->getCheckoutUrl($freshOrder);
+            }
+
+            // EXPIRED / CANCELLED — mark failed so a new one will be created
+            $payment->update(['status' => 'failed', 'gateway_response' => $freshOrder]);
+        } catch (\Exception $e) {
+            // 404 or auth error → the order never existed on production
+            $this->logError('getFreshCheckoutUrl: Cashfree getOrder failed', [
+                'payment_id' => $payment->id,
+                'order_id'   => $payment->order_id,
+                'error'      => $e->getMessage(),
+            ]);
+            $payment->update(['status' => 'failed']);
+        }
+
+        // ── Step 2: create a fresh Cashfree order for this user ───────────────
+        $user = $payment->user;
+
+        if (!$user) {
+            $this->logError('getFreshCheckoutUrl: user not found for payment', [
+                'payment_id' => $payment->id,
+            ]);
+            return null;
+        }
+
+        $result = $this->getOrCreateCheckoutUrl($user, 'web');
+
+        return $result['checkout_url'] ?? null;
+    }
+
     private function logInfo(string $message, array $context = []): void
     {
         try {
