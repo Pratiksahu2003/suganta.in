@@ -179,13 +179,14 @@ class AuthService
                 if (!empty($paymentResult['checkout_url'])) {
                     return [
                         'requires_registration_payment' => true,
-                        'payment_link' => $paymentResult['checkout_url'],
-                        'order_id' => $paymentResult['order_id'] ?? null,
-                        'actual_price' => $paymentResult['actual_price'] ?? null,
-                        'discounted_price' => $paymentResult['discounted_price'] ?? null,
-                        'description' => $paymentResult['description'] ?? null,
-                        'role' => $user->role,
-                        'message' => 'Registration fee payment is required to complete login.'
+                        'payment_link'                  => $paymentResult['checkout_url'],
+                        'payment_session_id'            => $paymentResult['payment_session_id'] ?? null,
+                        'order_id'                      => $paymentResult['order_id'] ?? null,
+                        'actual_price'                  => $paymentResult['actual_price'] ?? null,
+                        'discounted_price'              => $paymentResult['discounted_price'] ?? null,
+                        'description'                   => $paymentResult['description'] ?? null,
+                        'role'                          => $user->role,
+                        'message'                       => 'Registration fee payment is required to complete login.',
                     ];
                 }
 
@@ -359,6 +360,7 @@ class AuthService
                 return [
                     'requires_registration_payment' => true,
                     'payment_link'                  => $paymentResult['checkout_url'],
+                    'payment_session_id'            => $paymentResult['payment_session_id'] ?? null,
                     'order_id'                      => $paymentResult['order_id'] ?? null,
                     'actual_price'                  => $paymentResult['actual_price'] ?? null,
                     'discounted_price'              => $paymentResult['discounted_price'] ?? null,

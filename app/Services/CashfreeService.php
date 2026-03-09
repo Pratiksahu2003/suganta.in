@@ -27,6 +27,10 @@ class CashfreeService
 
     /**
      * Build the order payload for Cashfree order creation.
+     *
+     * URL construction deliberately extracts only the scheme+host from APP_URL
+     * so that it stays correct even when APP_URL already contains a path suffix
+     * like "/api/v1" (which would otherwise produce doubled segments).
      */
     public function buildOrderPayload(
         string $orderId,
@@ -36,10 +40,12 @@ class CashfreeService
         float $orderAmount,
         string $orderCurrency
     ): array {
+        $baseUrl = $this->deriveBaseUrl();
+
         $configReturnUrl = config('cashfree.return_url', '');
         $returnUrl = $configReturnUrl
             ? rtrim($configReturnUrl, '/') . '?order_id=' . $orderId
-            : url('/api/v1/payment/callback') . '?order_id=' . $orderId;
+            : $baseUrl . '/api/v1/payment/callback?order_id=' . $orderId;
 
         return [
             'order_id'         => $orderId,
@@ -52,9 +58,28 @@ class CashfreeService
             ],
             'order_meta' => [
                 'return_url' => $returnUrl,
-                'notify_url' => url('/api/v1/payment/webhook'),
+                'notify_url' => $baseUrl . '/api/v1/payment/webhook',
             ],
         ];
+    }
+
+    /**
+     * Derive the scheme + host (+ optional port) from APP_URL, ignoring any
+     * path component.  This prevents doubled path segments when APP_URL is
+     * set to something like "https://www.suganta.in/api/v1".
+     */
+    private function deriveBaseUrl(): string
+    {
+        $appUrl = rtrim(config('app.url', 'http://localhost'), '/');
+        $parsed = parse_url($appUrl);
+
+        $base  = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? 'localhost');
+
+        if (!empty($parsed['port'])) {
+            $base .= ':' . $parsed['port'];
+        }
+
+        return $base;
     }
 
     /**

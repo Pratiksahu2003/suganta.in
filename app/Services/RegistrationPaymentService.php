@@ -78,7 +78,7 @@ class RegistrationPaymentService
             ];
         }
 
-        // Reuse an existing pending / created payment if possible
+        // Reuse an existing pending / created payment if it is still active on Cashfree
         $existingPayment = Payment::where('user_id', $user->id)
             ->where('meta->type', 'registration')
             ->whereIn('status', ['created', 'pending'])
@@ -86,37 +86,39 @@ class RegistrationPaymentService
             ->first();
 
         if ($existingPayment) {
-            // Try to extract URL from locally stored gateway response
-            $checkoutUrl = $this->cashfree->getCheckoutUrl($existingPayment->gateway_response ?? []);
-
-            if ($checkoutUrl) {
-                return [
-                    'success'          => true,
-                    'checkout_url'     => $checkoutUrl,
-                    'order_id'         => $existingPayment->order_id,
-                    'actual_price'     => $roleCharges['actual_price'],
-                    'discounted_price' => $roleCharges['discounted_price'],
-                    'description'      => $roleCharges['description'],
-                ];
-            }
-
-            // Locally stored response is stale — refresh from Cashfree
+            // Always verify with Cashfree — never trust locally-cached session IDs
+            // because they may be stale (e.g. the order was created while the code was
+            // pointing at the wrong endpoint, or the session has since expired).
             try {
                 $freshOrder  = $this->cashfree->getOrder($existingPayment->order_id);
-                $checkoutUrl = $this->cashfree->getCheckoutUrl($freshOrder);
+                $orderStatus = strtoupper($freshOrder['order_status'] ?? '');
 
-                $existingPayment->update(['gateway_response' => $freshOrder]);
-
-                if ($checkoutUrl) {
-                    return [
-                        'success'          => true,
-                        'checkout_url'     => $checkoutUrl,
-                        'order_id'         => $existingPayment->order_id,
-                        'actual_price'     => $roleCharges['actual_price'],
-                        'discounted_price' => $roleCharges['discounted_price'],
-                        'description'      => $roleCharges['description'],
-                    ];
+                if ($this->cashfree->isOrderPaid($freshOrder)) {
+                    // Race condition: paid between two requests — activate user
+                    $this->handlePaymentSuccess($existingPayment->order_id, []);
+                    return ['success' => true, 'already_paid' => true];
                 }
+
+                if (in_array($orderStatus, ['ACTIVE'], true)) {
+                    // Order still active — use fresh session from Cashfree
+                    $existingPayment->update(['gateway_response' => $freshOrder]);
+                    $checkoutUrl = $this->cashfree->getCheckoutUrl($freshOrder);
+
+                    if ($checkoutUrl) {
+                        return [
+                            'success'             => true,
+                            'checkout_url'        => $checkoutUrl,
+                            'payment_session_id'  => $freshOrder['payment_session_id'] ?? null,
+                            'order_id'            => $existingPayment->order_id,
+                            'actual_price'        => $roleCharges['actual_price'],
+                            'discounted_price'    => $roleCharges['discounted_price'],
+                            'description'         => $roleCharges['description'],
+                        ];
+                    }
+                }
+
+                // Order is EXPIRED, CANCELLED, or no usable session — mark failed and create new
+                $existingPayment->update(['status' => 'failed', 'gateway_response' => $freshOrder]);
             } catch (\Exception $e) {
                 $this->logError('Failed to refresh existing registration payment order', [
                     'payment_id' => $existingPayment->id,
@@ -124,7 +126,7 @@ class RegistrationPaymentService
                     'error'      => $e->getMessage(),
                 ]);
 
-                // Mark old record as failed so a new order is created below
+                // If Cashfree returns 404 the order never existed; mark as failed
                 $existingPayment->update(['status' => 'failed']);
             }
         }
@@ -178,12 +180,13 @@ class RegistrationPaymentService
             ]);
 
             return [
-                'success'          => true,
-                'checkout_url'     => $checkoutUrl,
-                'order_id'         => $orderId,
-                'actual_price'     => $roleCharges['actual_price'],
-                'discounted_price' => $roleCharges['discounted_price'],
-                'description'      => $roleCharges['description'],
+                'success'            => true,
+                'checkout_url'       => $checkoutUrl,
+                'payment_session_id' => $orderResponse['payment_session_id'] ?? null,
+                'order_id'           => $orderId,
+                'actual_price'       => $roleCharges['actual_price'],
+                'discounted_price'   => $roleCharges['discounted_price'],
+                'description'        => $roleCharges['description'],
             ];
         } catch (\Exception $e) {
             $this->logError('Registration payment initiation failed', [
