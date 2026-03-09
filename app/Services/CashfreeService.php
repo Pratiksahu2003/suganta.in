@@ -171,8 +171,8 @@ class CashfreeService
     /**
      * Verify the HMAC-SHA256 signature from a Cashfree webhook.
      *
-     * Uses the official Cashfree PHP SDK when available for guaranteed
-     * compatibility; falls back to manual verification otherwise.
+     * Cashfree: signedPayload = timestamp + rawBody, signature = Base64(HMAC-SHA256(signedPayload, secret))
+     * Tries both timestamp+body and body+timestamp; some Cashfree setups use alternate order.
      *
      * @see https://www.cashfree.com/docs/payments/online/webhooks/signature-verification
      */
@@ -192,24 +192,19 @@ class CashfreeService
             return false;
         }
 
-        // Prefer official Cashfree SDK when available (guaranteed algorithm match)
-        if (class_exists(\Cashfree\Cashfree::class)) {
-            try {
-                // SDK uses 0 = SANDBOX, 1 = PRODUCTION (instance props, not constants)
-                $env = $this->isProduction ? 1 : 0;
-                $cashfree = new \Cashfree\Cashfree($env, $this->appId, $secret, '', '', '', false);
-                $cashfree->PGVerifyWebhookSignature($signature, $rawBody, $timestamp);
+        $verify = function (string $signedPayload) use ($secret, $signature): bool {
+            $computed = base64_encode(hash_hmac('sha256', $signedPayload, $secret, true));
+            return hash_equals($computed, $signature);
+        };
+
+        // Try all documented variants (Cashfree docs differ: some use dot, some don't)
+        foreach ([$timestamp . $rawBody, $timestamp . '.' . $rawBody, $rawBody . $timestamp] as $payload) {
+            if ($verify($payload)) {
                 return true;
-            } catch (\Throwable $e) {
-                return false;
             }
         }
 
-        // Manual verification (same algorithm as SDK)
-        $signedPayload = $timestamp . $rawBody;
-        $computed = base64_encode(hash_hmac('sha256', $signedPayload, $secret, true));
-
-        return hash_equals($computed, $signature);
+        return false;
     }
 
     /**
