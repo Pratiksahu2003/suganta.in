@@ -217,14 +217,21 @@ class CashfreeService
             }
         }
 
-        $verify = function (string $signedPayload) use ($secret, $signature): bool {
-            $computed = base64_encode(hash_hmac('sha256', $signedPayload, $secret, true));
-            return hash_equals($computed, $signature);
-        };
+        // According to official docs: signedPayload = timestamp + rawBody
+        $signedPayload = $timestamp . $rawBody;
+        $computedSignature = base64_encode(hash_hmac('sha256', $signedPayload, $secret, true));
 
-        // Try all documented variants (Cashfree docs differ: some use dot, some don't)
-        foreach ([$timestamp . $rawBody, $timestamp . '.' . $rawBody, $rawBody . $timestamp] as $payload) {
-            if ($verify($payload)) {
+        if (hash_equals($computedSignature, $signature)) {
+            Log::info('Cashfree webhook: signature verification successful');
+            return true;
+        }
+
+        // Fallback: try with client secret if webhook secret fails
+        $clientSecret = $this->secretKey;
+        if ($secret !== $clientSecret) {
+            $computedWithClientSecret = base64_encode(hash_hmac('sha256', $signedPayload, $clientSecret, true));
+            if (hash_equals($computedWithClientSecret, $signature)) {
+                Log::info('Cashfree webhook: signature verification successful with client secret');
                 return true;
             }
         }
