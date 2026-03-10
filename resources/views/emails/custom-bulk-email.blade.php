@@ -49,7 +49,7 @@
                                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
                                             <tr>
                                                 <td align="center" style="width: 160px; height: 64px; padding: 4px;">
-                                                    <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name', 'SuGanta Tutors') }} Logo" style="max-width: 160px; width: 100%; height: auto; display: block; border: 0;" />
+                                                    <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name', 'SuGanta Tutors') }} Logo" style="max-width: 160px; width: 100%; height: auto; display: block; border: 0;" />
                                                 </td>
                                             </tr>
                                         </table>

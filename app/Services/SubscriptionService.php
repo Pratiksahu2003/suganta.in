@@ -256,7 +256,6 @@ class SubscriptionService
                 'user_id' => $payment->user_id,
                 'plan_id' => $plan->id,
                 'payment_id' => $payment->id,
-                'expires_at' => $expiresAt->toDateTimeString(),
             ]);
 
             return $subscription;

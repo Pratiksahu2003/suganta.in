@@ -270,7 +270,7 @@
         <div class="header">
             <div class="logo-container">
                 <div class="logo">
-                    <img src="{{ asset('logo/Su250.png') }}" alt="International">
+                    <img src="https://www.suganta.com/logo/Su250.png" alt="International">
                 </div>
             </div>
             @if($type === 'email_verification')

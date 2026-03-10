@@ -251,7 +251,7 @@
         <div class="header">
             <div class="logo-container">
                 <div class="logo w-40 h-16 flex items-center justify-center transform transition-all duration-300 group-hover:rotate-6 overflow-hidden">
-                    <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name') }} Logo" class="w-full h-full object-contain p-1">
+                    <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name') }} Logo" class="w-full h-full object-contain p-1">
                 </div>
             </div>
             <h1>{{ $isVerified ? 'Account Verified!' : 'Verification Update' }}</h1>

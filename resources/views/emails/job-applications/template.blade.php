@@ -29,7 +29,7 @@
 <body>
 <div class="email-wrapper">
     <div class="header">
-        <div class="logo"> <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name', 'SuGanta Tutors') }} Logo" style="max-width: 160px; width: 100%; height: auto; display: block; border: 0;" /></div>
+        <div class="logo"> <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name', 'SuGanta Tutors') }} Logo" style="max-width: 160px; width: 100%; height: auto; display: block; border: 0;" /></div>
         <div class="tagline">Application Update</div>
     </div>
     <div class="content">
