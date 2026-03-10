@@ -321,19 +321,16 @@ class SubscriptionService
 
     /**
      * Calculate expiration date based on billing period.
+     * Supports enum values: 'monthly', 'yearly', 'lifetime'
      * Returns null for lifetime subscriptions.
      */
     protected function calculateExpirationDate(Carbon $startDate, string $billingPeriod): ?Carbon
     {
         return match (strtolower($billingPeriod)) {
-            'daily' => $startDate->copy()->addDay(),
-            'weekly' => $startDate->copy()->addWeek(),
             'monthly' => $startDate->copy()->addMonth(),
-            'quarterly' => $startDate->copy()->addMonths(3),
-            'half_yearly', 'semi_annually' => $startDate->copy()->addMonths(6),
-            'yearly', 'annually' => $startDate->copy()->addYear(),
+            'yearly' => $startDate->copy()->addYear(),
             'lifetime' => null, // No expiration for lifetime plans
-            default => $startDate->copy()->addMonth(), // Default to monthly
+            default => throw new \InvalidArgumentException("Invalid billing period: {$billingPeriod}. Supported values are: monthly, yearly, lifetime"),
         };
     }
 
