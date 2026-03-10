@@ -490,7 +490,7 @@
         <!-- Header -->
         <div class="email-header">
             <div class="logo-wrapper">
-                <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name', 'SuGanta') }}" class="logo">
+                <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name', 'SuGanta') }}" class="logo">
             </div>
             <h1 class="header-title">🎉 Payment Successful!</h1>
             <p class="header-subtitle">Your transaction has been completed successfully</p>
@@ -630,7 +630,7 @@
         <!-- Footer -->
         <div class="email-footer">
             <div class="footer-logo-wrapper">
-                <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name', 'SuGanta') }}" class="footer-logo">
+                <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name', 'SuGanta') }}" class="footer-logo">
             </div>
             
             <p class="footer-text">

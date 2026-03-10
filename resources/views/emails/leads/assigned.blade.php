@@ -28,7 +28,7 @@
     <body>
         <div class="email-wrapper">
             <div class="header">
-                    <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name') }}" class="logo-img">
+                    <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name') }}" class="logo-img">
             </div>
 
             <div class="content">

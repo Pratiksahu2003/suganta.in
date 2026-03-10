@@ -241,7 +241,7 @@
         <!-- Header -->
         <div class="header">
             <div class="logo-container">
-                <img src="{{ asset('logo/Su250.png') }}" alt="{{ config('app.name', 'SuGanta') }} Logo" class="logo">
+                <img src="https://www.suganta.com/logo/Su250.png" alt="{{ config('app.name', 'SuGanta') }} Logo" class="logo">
             </div>
             <h1>{{ $title ?? 'Payment Update' }}</h1>
             <p>Your payment status has been updated</p>
