@@ -231,6 +231,13 @@ class AuthController extends Controller
 
             return $this->success('If an account with that email exists, a password reset link has been sent.');
         } catch (\Exception $e) {
+            $statusCode = $e->getCode();
+            if ($statusCode >= 100 && $statusCode < 600) {
+                if ($statusCode === 403) {
+                    return $this->forbidden($e->getMessage());
+                }
+            }
+            Log::error('API Forgot Password failed: ' . $e->getMessage());
             return $this->serverError('Password reset request failed. Please try again.', $e);
         }
     }
@@ -249,6 +256,16 @@ class AuthController extends Controller
                 return $this->error('Invalid or expired reset token', 400);
             }
         } catch (\Exception $e) {
+            $statusCode = $e->getCode();
+            if ($statusCode >= 100 && $statusCode < 600) {
+                if ($statusCode === 403) {
+                    return $this->forbidden($e->getMessage());
+                }
+                if ($statusCode === 404) {
+                    return $this->error('Invalid or expired reset token', 400);
+                }
+            }
+            Log::error('API Reset Password failed: ' . $e->getMessage());
             return $this->serverError('Password reset failed. Please try again.', $e);
         }
     }

@@ -383,9 +383,9 @@
         <!-- Footer -->
         <div class="footer">
             <div class="footer-links">
-                <a href="{{ config('company.contact.website') }}" class="footer-link">Visit Website</a>
-                <a href="{{ route('contact') }}" class="footer-link">Contact Support</a>
-                <a href="{{ route('about') }}" class="footer-link">About Us</a>
+                <a href="{{ config('company.contact.website', config('app.frontend_url', 'https://www.suganta.com')) }}" class="footer-link">Visit Website</a>
+                <a href="{{ config('app.frontend_url', 'https://www.suganta.com') }}/contact" class="footer-link">Contact Support</a>
+                <a href="{{ config('app.frontend_url', 'https://www.suganta.com') }}/about" class="footer-link">About Us</a>
             </div>
 
             <p class="footer-text">

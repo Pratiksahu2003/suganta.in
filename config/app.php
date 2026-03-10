@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL (Password Reset Links, etc.)
+    |--------------------------------------------------------------------------
+    |
+    | Base URL for the frontend application. Used for password reset links
+    | and other redirects to the main website.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'https://www.suganta.com'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
