@@ -11,7 +11,7 @@ Dashboard summary endpoints for authenticated users. The User Dashboard returns 
 
 | Method | Endpoint | Description | Access |
 |--------|----------|-------------|--------|
-| GET | `/dashboard` | User dashboard (counts, recent payments, notifications, user info) | Any authenticated user |
+| GET | `/dashboard` | User dashboard (counts, latest X% leads, recent payments, notifications, user info) | Any authenticated user |
 
 ---
 
@@ -22,7 +22,13 @@ Dashboard summary endpoints for authenticated users. The User Dashboard returns 
 | **Endpoint** | `GET /api/v1/dashboard` |
 | **Access** | Protected (auth:sanctum) |
 
-Returns counts of the authenticated user's support tickets, payments, leads, study requirements, and posts, plus last 5 payment records, 10 latest notifications, and user profile info.
+Returns counts of the authenticated user's support tickets, payments, leads, study requirements, plus latest X% of leads, last 5 payment records, 10 latest notifications, and user profile info.
+
+### Query Parameters
+
+| Parameter | Type | Required | Default | Validation | Description |
+|-----------|------|----------|---------|------------|-------------|
+| latest_leads_percent | integer | No | 10 | 1–100 | Percentage of total leads to return as latest (most recent first) |
 
 ### Counts (User-Scoped)
 
@@ -48,6 +54,28 @@ Returns counts of the authenticated user's support tickets, payments, leads, stu
       "leads": 5,
       "study_requirements": 2,
       "posts": 0
+    },
+    "latest_leads": {
+      "data": [
+        {
+          "id": 1,
+          "lead_id": "SUG-20250311-000123",
+          "name": "John Doe",
+          "email": "john@example.com",
+          "phone": "+911234567890",
+          "type": "student",
+          "source": "website",
+          "status": "new",
+          "created_at": "2025-03-11T10:00:00.000000Z",
+          "user": { "id": 5, "name": "Jane Smith", "email": "jane@example.com" },
+          "lead_owner": { "id": 3, "name": "Teacher One", "email": "teacher@example.com" }
+        }
+      ],
+      "meta": {
+        "total": 5,
+        "percent": 10,
+        "returned": 1
+      }
     },
     "recent_payments": [
       {
@@ -216,7 +244,13 @@ Returns system-wide counts for support tickets, payments, leads, study requireme
 ### User Dashboard (cURL)
 
 ```bash
+# Default (latest 10% of leads)
 curl -X GET "https://api.example.com/api/v1/dashboard" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Accept: application/json"
+
+# Latest 20% of leads
+curl -X GET "https://api.example.com/api/v1/dashboard?latest_leads_percent=20" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Accept: application/json"
 ```
@@ -240,6 +274,7 @@ const response = await fetch('/api/v1/dashboard', {
 });
 const { data } = await response.json();
 console.log('Counts:', data.counts);
+console.log('Latest leads:', data.latest_leads);
 console.log('Recent payments:', data.recent_payments);
 console.log('User:', data.user);
 ```
@@ -249,8 +284,9 @@ console.log('User:', data.user);
 ## Comparison
 
 | Feature | User Dashboard | Admin Dashboard |
-|---------|---------------|-----------------|
+|---------|----------------|-----------------|
 | **Counts** | User's own data | System-wide totals |
+| **Latest leads** | X% most recent (`latest_leads_percent` query param) | — |
 | **Recent payments** | Last 5 payment records | — |
 | **Notifications** | User's 10 latest | 10 latest from all users |
 | **User info** | Current user only | Recipient user per notification |
