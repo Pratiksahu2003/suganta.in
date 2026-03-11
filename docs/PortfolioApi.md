@@ -1,6 +1,6 @@
 # Portfolio API
 
-Endpoints for managing the authenticated user's portfolio items. All data is user-scoped.
+Endpoints for managing the authenticated user's portfolio. **One portfolio per user only.** All data is user-scoped.
 
 **Base path**: `/api/v1`  
 **Auth**: All endpoints require Bearer token (Sanctum)
@@ -12,9 +12,9 @@ Endpoints for managing the authenticated user's portfolio items. All data is use
 | Method | Endpoint | Description | Access |
 |--------|----------|-------------|--------|
 | GET | `/portfolios/options` | Get dropdown options (statuses, categories, tags) | Authenticated user |
-| GET | `/portfolios` | List auth user's portfolios | Authenticated user |
-| POST | `/portfolios` | Create a new portfolio | Authenticated user |
-| PUT/PATCH | `/portfolios/{portfolio}` | Update an existing portfolio | Authenticated user (owner only) |
+| GET | `/portfolios` | Get auth user's portfolio (single object or null) | Authenticated user |
+| POST | `/portfolios` | Create portfolio (only if user has none) | Authenticated user |
+| PUT/PATCH | `/portfolios` | Update auth user's portfolio | Authenticated user |
 
 ---
 
@@ -26,7 +26,7 @@ Endpoints for managing the authenticated user's portfolio items. All data is use
 | **Content-Type** | — |
 | **Access** | Protected (auth:sanctum) |
 
-Returns dropdown options for statuses, and the user's existing categories and tags from their portfolios.
+Returns dropdown options for statuses, and the user's existing categories and tags from their portfolio.
 
 ### Query Parameters
 
@@ -53,7 +53,7 @@ None.
 
 ---
 
-## 2. List Portfolios
+## 2. Get Portfolio
 
 | | |
 |---|---|
@@ -61,57 +61,67 @@ None.
 | **Content-Type** | — |
 | **Access** | Protected (auth:sanctum) |
 
-Returns all portfolios for the authenticated user, ordered by `order` ASC and `created_at` DESC.
+Returns the authenticated user's single portfolio. Returns `null` if the user has not created one yet.
 
 ### Query Parameters
 
 None.
 
-### Success (200)
+### Success (200) – Portfolio exists
 
 ```json
 {
-  "message": "Portfolios retrieved successfully.",
+  "message": "Portfolio retrieved successfully.",
   "success": true,
   "code": 200,
-  "data": [
-    {
+  "data": {
+    "id": 1,
+    "user_id": 1,
+    "user": {
       "id": 1,
-      "user_id": 1,
-      "user": {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john@example.com"
-      },
-      "title": "E-commerce Website",
-      "description": "Full-stack e-commerce platform.",
-      "images": [
-        {
-          "path": "users/1/portfolio/image_xxx.jpg",
-          "url": "https://api.example.com/storage/users/1/portfolio/image_xxx.jpg"
-        }
-      ],
-      "files": [
-        {
-          "path": "users/1/portfolio/doc.pdf",
-          "url": "https://api.example.com/storage/users/1/portfolio/doc.pdf",
-          "name": "doc.pdf"
-        }
-      ],
-      "category": "Web Design, E-commerce",
-      "categories": ["Web Design", "E-commerce"],
-      "tags": "React, Laravel, Stripe",
-      "tags_array": ["React", "Laravel", "Stripe"],
-      "url": "https://example.com/project",
-      "status": "published",
-      "order": 1,
-      "is_featured": true,
-      "created_at": "2025-03-11T10:00:00.000000Z",
-      "updated_at": "2025-03-11T12:00:00.000000Z"
-    }
-  ]
+      "name": "John Doe",
+      "email": "john@example.com"
+    },
+    "title": "E-commerce Website",
+    "description": "Full-stack e-commerce platform.",
+    "images": [
+      {
+        "path": "users/1/portfolio/image_xxx.jpg",
+        "url": "https://api.example.com/storage/users/1/portfolio/image_xxx.jpg"
+      }
+    ],
+    "files": [
+      {
+        "path": "users/1/portfolio/doc.pdf",
+        "url": "https://api.example.com/storage/users/1/portfolio/doc.pdf",
+        "name": "doc.pdf"
+      }
+    ],
+    "category": "Web Design, E-commerce",
+    "categories": ["Web Design", "E-commerce"],
+    "tags": "React, Laravel, Stripe",
+    "tags_array": ["React", "Laravel", "Stripe"],
+    "url": "https://example.com/project",
+    "status": "published",
+    "order": 1,
+    "is_featured": true,
+    "created_at": "2025-03-11T10:00:00.000000Z",
+    "updated_at": "2025-03-11T12:00:00.000000Z"
+  }
 }
 ```
+
+### Success (200) – No portfolio yet
+
+```json
+{
+  "message": "Portfolio retrieved successfully.",
+  "success": true,
+  "code": 200
+}
+```
+
+*Note: When no portfolio exists, `data` is omitted. Use POST /portfolios to create one.*
 
 ---
 
@@ -123,7 +133,7 @@ None.
 | **Content-Type** | `multipart/form-data` |
 | **Access** | Protected (auth:sanctum) |
 
-Creates a new portfolio item for the authenticated user.
+Creates a new portfolio for the authenticated user. **One portfolio per user only.** Fails if the user already has a portfolio (use PUT/PATCH to update instead).
 
 ### Request Parameters
 
@@ -181,6 +191,16 @@ Creates a new portfolio item for the authenticated user.
 }
 ```
 
+### Error (422) – Already Has Portfolio
+
+```json
+{
+  "message": "You already have a portfolio. Use PUT or PATCH /portfolios to update it.",
+  "success": false,
+  "code": 422
+}
+```
+
 ### Error (422) – Validation
 
 ```json
@@ -202,17 +222,15 @@ Creates a new portfolio item for the authenticated user.
 
 | | |
 |---|---|
-| **Endpoint** | `PUT /api/v1/portfolios/{portfolio}` or `PATCH /api/v1/portfolios/{portfolio}` |
+| **Endpoint** | `PUT /api/v1/portfolios` or `PATCH /api/v1/portfolios` |
 | **Content-Type** | `multipart/form-data` or `application/json` |
-| **Access** | Protected (auth:sanctum, owner only) |
+| **Access** | Protected (auth:sanctum) |
 
-Updates an existing portfolio. Only the owner can update. All parameters are optional (partial update).
+Updates the authenticated user's portfolio. No ID in URL — updates the user's single portfolio. All parameters are optional (partial update).
 
 ### Path Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| portfolio | integer | Portfolio ID (route model binding) |
+None.
 
 ### Request Parameters
 
@@ -264,21 +282,13 @@ Same as Create (images: max 10, 5MB each; files: max 10, 10MB each).
 }
 ```
 
-### Error (403) – Not Owner
+### Error (404) – No Portfolio Yet
 
 ```json
 {
-  "message": "You are not allowed to update this portfolio.",
+  "message": "You do not have a portfolio yet. Use POST /portfolios to create one.",
   "success": false,
-  "code": 403
-}
-```
-
-### Error (404) – Portfolio Not Found
-
-```json
-{
-  "message": "No query results for model [App\\Models\\Portfolio]."
+  "code": 404
 }
 ```
 
@@ -320,7 +330,7 @@ curl -X GET "https://api.example.com/api/v1/portfolios/options" \
   -H "Accept: application/json"
 ```
 
-### List Portfolios (cURL)
+### Get Portfolio (cURL)
 
 ```bash
 curl -X GET "https://api.example.com/api/v1/portfolios" \
@@ -350,7 +360,7 @@ curl -X POST "https://api.example.com/api/v1/portfolios" \
 ### Update Portfolio (cURL)
 
 ```bash
-curl -X PATCH "https://api.example.com/api/v1/portfolios/1" \
+curl -X PATCH "https://api.example.com/api/v1/portfolios" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Accept: application/json" \
   -F "title=Updated E-commerce Website" \
@@ -392,7 +402,7 @@ formData.append('title', 'Updated Title');
 formData.append('remove_images[]', 'users/1/portfolio/old.jpg');
 formData.append('images[]', newImageFile);
 
-const response = await fetch(`/api/v1/portfolios/${portfolioId}`, {
+const response = await fetch('/api/v1/portfolios', {
   method: 'PATCH',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -409,7 +419,6 @@ const response = await fetch(`/api/v1/portfolios/${portfolioId}`, {
 | Code | Condition |
 |------|-----------|
 | 401 | Unauthenticated |
-| 403 | Not the portfolio owner |
-| 404 | Portfolio not found |
-| 422 | Validation failed (check `errors` object) |
+| 404 | No portfolio yet (on update — use POST to create first) |
+| 422 | Validation failed, or user already has a portfolio (on create) |
 | 500 | Server error (e.g. upload failure) |

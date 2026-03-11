@@ -101,7 +101,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('invoice/{orderId}', 'invoice');
     });
 
-    // Portfolio Routes (auth user's data only)
+    // Portfolio Routes (one portfolio per user only)
     Route::middleware('auth:sanctum')
         ->prefix('portfolios')
         ->controller(PortfolioController::class)
@@ -109,7 +109,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('options', 'options');
             Route::get('/', 'show');
             Route::post('/', 'store');
-            Route::match(['put', 'patch'], '{portfolio}', 'update');
+            Route::match(['put', 'patch'], '/', 'update');
         });
 
     // Lead Routes (auth user's own leads and created leads only)

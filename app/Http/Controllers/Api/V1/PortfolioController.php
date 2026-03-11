@@ -58,13 +58,17 @@ class PortfolioController extends BaseApiController
     }
 
     /**
-     * Create a new portfolio.
+     * Create a new portfolio. One portfolio per user only.
      */
     public function store(StorePortfolioRequest $request): JsonResponse
     {
         try {
             /** @var User $user */
             $user = Auth::user();
+
+            if (Portfolio::where('user_id', $user->id)->exists()) {
+                return $this->error('You already have a portfolio. Use PUT or PATCH /portfolios to update it.', 422);
+            }
 
             $validated = $request->validated();
 
@@ -119,36 +123,34 @@ class PortfolioController extends BaseApiController
     }
 
     /**
-     * Show auth user's portfolios (fetched by Auth::id(), no ID in URL).
+     * Show auth user's portfolio (one per user). Returns null if not yet created.
      */
     public function show(): JsonResponse
     {
         /** @var User $user */
         $user = Auth::user();
 
-        $portfolios = Portfolio::forUser($user->id)
-            ->with('user')
-            ->orderBy('order')
-            ->latest()
-            ->get();
+        $portfolio = Portfolio::forUser($user->id)->with('user')->first();
 
         return $this->success(
-            'Portfolios retrieved successfully.',
-            PortfolioResource::collection($portfolios)
+            'Portfolio retrieved successfully.',
+            $portfolio ? new PortfolioResource($portfolio) : null
         );
     }
 
     /**
-     * Update an existing portfolio.
+     * Update the auth user's portfolio (one per user).
      */
-    public function update(UpdatePortfolioRequest $request, Portfolio $portfolio): JsonResponse
+    public function update(UpdatePortfolioRequest $request): JsonResponse
     {
         try {
             /** @var User $user */
             $user = Auth::user();
 
-            if ($portfolio->user_id !== $user->id) {
-                return $this->forbidden('You are not allowed to update this portfolio.');
+            $portfolio = Portfolio::forUser($user->id)->first();
+
+            if (!$portfolio) {
+                return $this->notFound('You do not have a portfolio yet. Use POST /portfolios to create one.');
             }
 
             $validated = $request->validated();
