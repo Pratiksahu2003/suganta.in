@@ -28,6 +28,7 @@ Welcome to the SuGanta API documentation! This folder contains comprehensive doc
 - [Profile API](./ProfileApi.md) - User profile management endpoints
 - [Registration API](./RegistrationApi.md) - User registration endpoints
 - [Options API](./OptionApi.md) - Dropdown options and configuration
+- [Portfolio API](./PortfolioApi.md) - Portfolio management (create, update, files, images)
 
 ### Integrations
 - [SMS Integration](./SMS_INTEGRATION.md) - SMS service integration guide
@@ -158,7 +159,7 @@ if (notification.resource_type === 'support_ticket') {
 
 | Topic | Documentation |
 |-------|---------------|
-| **API Endpoints** | [Dashboard API](./DashboardApi.md), [Notification API](./NotificationApi.md), [Payment API](./PaymentApi.md), [Profile API](./ProfileApi.md), [Support Ticket API](./SUPPORT_TICKET_API.md), [Registration API](./RegistrationApi.md), [Options API](./OptionApi.md) |
+| **API Endpoints** | [Dashboard API](./DashboardApi.md), [Notification API](./NotificationApi.md), [Payment API](./PaymentApi.md), [Portfolio API](./PortfolioApi.md), [Profile API](./ProfileApi.md), [Support Ticket API](./SUPPORT_TICKET_API.md), [Registration API](./RegistrationApi.md), [Options API](./OptionApi.md) |
 | **File Uploads** | [Support Ticket API](./SUPPORT_TICKET_API.md#file-upload-specifications), [Setup Storage](./SETUP_STORAGE.md) |
 | **Notifications** | [Notification API](./NotificationApi.md), [Notification Architecture](./NOTIFICATION_ARCHITECTURE.md) |
 | **Payments** | [Payment API](./PaymentApi.md) |
@@ -197,6 +198,7 @@ if (notification.resource_type === 'support_ticket') {
 | Dashboard API | ✅ Production Ready | [Dashboard API Docs](./DashboardApi.md) |
 | Notification API | ✅ Production Ready | [Notification API Docs](./NotificationApi.md) |
 | Payment API | ✅ Production Ready | [Payment API Docs](./PaymentApi.md) |
+| Portfolio API | ✅ Production Ready | [Portfolio API Docs](./PortfolioApi.md) |
 | Profile API | ✅ Production Ready | [Profile API Docs](./ProfileApi.md) |
 | Support Tickets | ✅ Production Ready | [Complete Docs](./SUPPORT_TICKET_API.md) |
 | File Uploads | ✅ Production Ready | [Setup Guide](./SETUP_STORAGE.md) |
