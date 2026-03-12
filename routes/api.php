@@ -119,12 +119,15 @@ Route::prefix('v1')->group(function (): void {
         Route::get('{lead}', 'show');
     });
 
-    // Study Requirement Routes (paginated listing)
+    // Study Requirement Routes (paginated listing, create, show, connect)
     Route::middleware('auth:sanctum')
         ->prefix('study-requirements')
         ->controller(StudyRequirementController::class)
         ->group(function () {
             Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('{studyRequirement}', 'show');
+            Route::post('{studyRequirement}/connect', 'connect');
         });
 
     // Subscription Routes
