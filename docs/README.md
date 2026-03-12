@@ -23,6 +23,7 @@ Welcome to the SuGanta API documentation! This folder contains comprehensive doc
 
 ### Feature-Specific APIs
 - [Dashboard API](./DashboardApi.md) - User and admin dashboard endpoints
+- [Form Auto-Fill API](./FormAutofillApi.md) - Profile data for pre-populating forms (contact, lead, profile edit)
 - [Notification API](./NotificationApi.md) - User notifications with pagination
 - [Payment API](./PaymentApi.md) - Payment history and invoice endpoints
 - [Profile API](./ProfileApi.md) - User profile management endpoints

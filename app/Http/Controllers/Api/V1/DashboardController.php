@@ -9,18 +9,18 @@ use App\Models\StudyRequirement;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends BaseApiController
 {
     /**
      * Get dashboard summary for authenticated user.
      * Returns counts (support tickets, payments, leads, study requirements, posts),
-     * latest X% of leads, 10 latest notifications, and user info.
-     * Query param: latest_leads_percent (1-100, default 10) — percentage of leads to return.
+     * 10 latest notifications, and user info (first_name, last_name, email, phone).
      */
-    public function index(Request $request): JsonResponse
+    public function index(): JsonResponse
     {
         /** @var User $user */
         $user = Auth::user();
@@ -41,18 +41,6 @@ class DashboardController extends BaseApiController
         $studyRequirementsCount = StudyRequirement::query()
             ->where('user_id', $user->id)
             ->count();
-
-        // Latest X% of leads for auth user
-        $percent = (int) $request->get('latest_leads_percent', 10);
-        $percent = max(1, min(100, $percent));
-        $latestLeadsLimit = (int) max(1, ceil($leadsCount * $percent / 100));
-        $latestLeads = Lead::query()
-            ->forAuthUser($user->id)
-            ->with(['user:id,name,email', 'leadOwner:id,name,email', 'assignedTo:id,name,email'])
-            ->orderByDesc('created_at')
-            ->limit($latestLeadsLimit)
-            ->get()
-            ->map(fn (Lead $l) => $l->toArray());
 
         // Last 5 payments for auth user
         $recentPayments = Payment::query()
@@ -80,14 +68,6 @@ class DashboardController extends BaseApiController
                 'payments' => $paymentsCount,
                 'leads' => $leadsCount,
                 'study_requirements' => $studyRequirementsCount,
-            ],
-            'latest_leads' => [
-                'data' => $latestLeads,
-                'meta' => [
-                    'total' => $leadsCount,
-                    'percent' => $percent,
-                    'returned' => $latestLeads->count(),
-                ],
             ],
             'recent_payments' => $recentPayments,
             'latest_notifications' => $notifications,

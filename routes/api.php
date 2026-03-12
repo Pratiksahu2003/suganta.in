@@ -109,7 +109,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('options', 'options');
             Route::get('/', 'show');
             Route::post('/', 'store');
-            Route::post( '/update', 'update');
+            Route::match(['put', 'patch'], '/', 'update');
         });
 
     // Lead Routes (auth user's own leads and created leads only)
@@ -146,6 +146,7 @@ Route::prefix('v1')->group(function (): void {
     // Profile Routes (auth user's own profile only)
     Route::middleware('auth:sanctum')->prefix('profile')->controller(ProfileController::class)->group(function () {
         Route::get('/', 'index');
+        Route::get('form-autofill', 'formAutofill');
         Route::match(['put', 'patch'], '/', 'update');
         Route::match(['put', 'patch'], 'location', 'updateLocation');
         Route::match(['put', 'patch'], 'social', 'updateSocial');

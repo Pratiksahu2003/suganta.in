@@ -349,14 +349,6 @@ None.
 
 ---
 
-## Related Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/v1/dashboard?latest_leads_percent=10` | Dashboard includes latest X% of auth user's leads (see [DashboardApi.md](DashboardApi.md)) |
-
----
-
 ## Access Rules
 
 A user can access a lead if **any** of the following applies:

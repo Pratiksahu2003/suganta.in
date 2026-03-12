@@ -69,6 +69,182 @@ class ProfileController extends BaseApiController
     }
 
     /**
+     * Get profile data formatted for form auto-fill.
+     * GET /api/v1/profile/form-autofill
+     *
+     * Returns profile data for pre-populating form inputs. Supports sectioned or flat format.
+     *
+     * Query params:
+     * - sections: Comma-separated (basic,location,social,teaching,student,institute). Omit = all.
+     * - format: 'sections' (default, grouped by section) or 'flat' (merged key-value).
+     */
+    public function formAutofill(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $profile = $user->profile;
+
+            if (!$profile) {
+                $profile = Profile::create(['user_id' => $user->id]);
+            }
+
+            $profile->load(['instituteInfo', 'studentInfo', 'teachingInfo']);
+
+            $allowedSections = ['basic', 'location', 'social', 'teaching', 'student', 'institute'];
+            $requestedSections = $request->query('sections')
+                ? array_map('trim', explode(',', (string) $request->query('sections')))
+                : $allowedSections;
+            $sections = array_values(array_intersect($requestedSections, $allowedSections));
+            if (empty($sections)) {
+                $sections = $allowedSections;
+            }
+
+            $format = strtolower((string) ($request->query('format') ?? 'sections'));
+            if (!in_array($format, ['flat', 'sections'])) {
+                $format = 'sections';
+            }
+
+            $sectionData = $this->buildFormAutofillSections($user, $profile, $sections);
+
+            if ($format === 'flat') {
+                $formData = [];
+                foreach ($sectionData as $data) {
+                    $formData = array_merge($formData, $data);
+                }
+            } else {
+                $formData = $sectionData;
+            }
+
+            $payload = [
+                'form_data' => $formData,
+                'sections_included' => $sections,
+                'format' => $format,
+                'profile_image_url' => $profile->profile_image ? $this->getFileUrl($profile->profile_image) : null,
+            ];
+
+            return $this->success('Form auto-fill data retrieved successfully.', $payload);
+        } catch (\Exception $e) {
+            Log::error('Form autofill error: ' . $e->getMessage(), [
+                'user_id' => $request->user()?->id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return $this->serverError('Unable to retrieve form auto-fill data.', $e);
+        }
+    }
+
+    /**
+     * Build form auto-fill data by section. Returns array keyed by section name or flat array.
+     */
+    private function buildFormAutofillSections($user, Profile $profile, array $sections): array
+    {
+        $result = [];
+
+        if (in_array('basic', $sections)) {
+            $result['basic'] = [
+                'first_name' => $profile->first_name ?? null,
+                'last_name' => $profile->last_name ?? null,
+                'display_name' => $profile->display_name ?? null,
+                'email' => $user->email ?? null,
+                'bio' => $profile->bio ?? null,
+                'date_of_birth' => $profile->date_of_birth ?? null,
+                'gender_id' => $profile->gender_id ?? null,
+                'nationality' => $profile->nationality ?? null,
+                'phone_primary' => $profile->phone_primary ?? null,
+                'phone_secondary' => $profile->phone_secondary ?? null,
+                'whatsapp' => $profile->whatsapp ?? null,
+                'website' => $profile->website ?? null,
+                'emergency_contact_name' => $profile->emergency_contact_name ?? null,
+                'emergency_contact_phone' => $profile->emergency_contact_phone ?? null,
+            ];
+        }
+
+        if (in_array('location', $sections)) {
+            $result['location'] = [
+                'address_line_1' => $profile->address_line_1 ?? null,
+                'address_line_2' => $profile->address_line_2 ?? null,
+                'area' => $profile->area ?? null,
+                'city' => $profile->city ?? null,
+                'state' => $profile->state ?? null,
+                'pincode' => $profile->pincode ?? null,
+                'country_id' => $profile->country_id ?? null,
+                'latitude' => $profile->latitude ?? null,
+                'longitude' => $profile->longitude ?? null,
+            ];
+        }
+
+        if (in_array('social', $sections)) {
+            $result['social'] = [
+                'facebook_url' => $profile->facebook_url ?? null,
+                'twitter_url' => $profile->twitter_url ?? null,
+                'instagram_url' => $profile->instagram_url ?? null,
+                'linkedin_url' => $profile->linkedin_url ?? null,
+                'youtube_url' => $profile->youtube_url ?? null,
+                'tiktok_url' => $profile->tiktok_url ?? null,
+                'telegram_username' => $profile->telegram_username ?? null,
+                'discord_username' => $profile->discord_username ?? null,
+                'github_url' => $profile->github_url ?? null,
+                'portfolio_url' => $profile->portfolio_url ?? null,
+                'blog_url' => $profile->blog_url ?? null,
+            ];
+        }
+
+        if (in_array('teaching', $sections)) {
+            $t = $profile->teachingInfo;
+            $result['teaching'] = [
+                'highest_qualification' => $profile->highest_qualification ?? $t?->qualification ?? null,
+                'institution_name' => $profile->institution_name ?? null,
+                'field_of_study' => $profile->field_of_study ?? null,
+                'graduation_year' => $profile->graduation_year ?? null,
+                'teaching_experience_years' => $t?->teaching_experience_years ?? null,
+                'hourly_rate_id' => $t?->hourly_rate_id ?? null,
+                'monthly_rate_id' => $t?->monthly_rate_id ?? null,
+                'travel_radius_km_id' => $t?->travel_radius_km_id ?? null,
+                'teaching_mode_id' => $t?->teaching_mode_id ?? null,
+                'availability_status_id' => $t?->availability_status_id ?? null,
+                'teaching_philosophy' => $t?->teaching_philosophy ?? null,
+                'subjects_taught' => $t?->subjects_taught ?? [],
+            ];
+        }
+
+        if (in_array('student', $sections)) {
+            $s = $profile->studentInfo;
+            $result['student'] = [
+                'current_class_id' => $s?->current_class_id ?? null,
+                'current_school' => $s?->current_school ?? null,
+                'board_id' => $s?->board_id ?? null,
+                'stream_id' => $s?->stream_id ?? null,
+                'parent_name' => $s?->parent_name ?? null,
+                'parent_phone' => $s?->parent_phone ?? null,
+                'parent_email' => $s?->parent_email ?? null,
+                'budget_min' => $s?->budget_min ?? null,
+                'budget_max' => $s?->budget_max ?? null,
+                'learning_challenges' => $s?->learning_challenges ?? null,
+            ];
+        }
+
+        if (in_array('institute', $sections)) {
+            $i = $profile->instituteInfo;
+            $result['institute'] = [
+                'institute_name' => $i?->institute_name ?? null,
+                'institute_type_id' => $i?->institute_type_id ?? null,
+                'institute_category_id' => $i?->institute_category_id ?? null,
+                'affiliation_number' => $i?->affiliation_number ?? null,
+                'registration_number' => $i?->registration_number ?? null,
+                'establishment_year_id' => $i?->establishment_year_id ?? null,
+                'principal_name' => $i?->principal_name ?? null,
+                'principal_phone' => $i?->principal_phone ?? null,
+                'principal_email' => $i?->principal_email ?? null,
+                'total_students_id' => $i?->total_students_id ?? null,
+                'total_teachers_id' => $i?->total_teachers_id ?? null,
+                'total_branches' => $i?->total_branches ?? null,
+                'institute_description' => $i?->institute_description ?? null,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
      * Update basic profile information.
      * PUT/PATCH /api/v1/profile
      */
