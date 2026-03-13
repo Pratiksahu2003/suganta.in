@@ -4,7 +4,6 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 class PortfolioResource extends JsonResource
 {
@@ -47,11 +46,10 @@ class PortfolioResource extends JsonResource
             return [];
         }
 
-        $disk = config('filesystems.upload_disk', 'public');
-        return array_map(function ($path) use ($disk) {
+        return array_map(function ($path) {
             return [
                 'path' => $path,
-                'url' => Storage::disk($disk)->url($path),
+                'url' => storage_file_url($path),
             ];
         }, $images);
     }
@@ -65,11 +63,10 @@ class PortfolioResource extends JsonResource
             return [];
         }
 
-        $disk = config('filesystems.upload_disk', 'public');
-        return array_map(function ($path) use ($disk) {
+        return array_map(function ($path) {
             return [
                 'path' => $path,
-                'url' => Storage::disk($disk)->url($path),
+                'url' => storage_file_url($path),
                 'name' => basename($path),
             ];
         }, $files);
