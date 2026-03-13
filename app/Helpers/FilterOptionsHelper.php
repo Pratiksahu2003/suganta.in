@@ -93,6 +93,7 @@ class FilterOptionsHelper
 
     /**
      * Standard pagination meta for API responses.
+     * Includes URLs for proper pagination support in mobile/web clients.
      */
     public static function paginationMeta($paginator): array
     {
@@ -100,7 +101,13 @@ class FilterOptionsHelper
             'current_page' => $paginator->currentPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
-            'last_page' => $paginator->lastPage(),
+            'last_page' => max(1, $paginator->lastPage()),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+            'first_page_url' => $paginator->url(1),
+            'last_page_url' => $paginator->url($paginator->lastPage()),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'prev_page_url' => $paginator->previousPageUrl(),
         ];
     }
 }

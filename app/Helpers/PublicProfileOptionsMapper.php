@@ -21,18 +21,21 @@ class PublicProfileOptionsMapper
     {
         $opt = fn (string $configKey, $value) => ProfileOptionsHelper::getOptionStructure($configKey, $value);
 
+        $teachingModeVal = $teachingInfo?->teaching_mode_id ?? optional($teacher)->teaching_mode;
+        $teachingMode = $opt('teaching_mode', $teachingModeVal)
+            ?? (is_string($teachingModeVal)
+                ? ProfileOptionsHelper::getOptionStructure('teaching_mode_enum', $teachingModeVal)
+                : null);
+
         return [
-            'teaching_mode' => $opt('teaching_mode', $teachingInfo?->teaching_mode_id ?? $teacher->teaching_mode)
-                ?? (is_string($teacher->teaching_mode)
-                    ? ProfileOptionsHelper::getOptionStructure('teaching_mode_enum', $teacher->teaching_mode)
-                    : null),
-            'availability_status' => $opt('availability_status', $teachingInfo?->availability_status_id ?? $teacher->availability_status),
-            'travel_radius_km' => $opt('travel_radius_km', $teachingInfo?->travel_radius_km_id ?? $teacher->travel_radius_km),
-            'hourly_rate_range' => $opt('hourly_rate_range', $teachingInfo?->hourly_rate_id ?? $teacher->hourly_rate_id ?? null),
-            'monthly_rate_range' => $opt('monthly_rate_range', $teachingInfo?->monthly_rate_id ?? $teacher->monthly_rate_id ?? null),
-            'experience_years' => $opt('teaching_experience_years', $teachingInfo?->teaching_experience_years ?? $teacher->experience_years),
+            'teaching_mode' => $teachingMode,
+            'availability_status' => $opt('availability_status', $teachingInfo?->availability_status_id ?? optional($teacher)->availability_status),
+            'travel_radius_km' => $opt('travel_radius_km', $teachingInfo?->travel_radius_km_id ?? optional($teacher)->travel_radius_km),
+            'hourly_rate_range' => $opt('hourly_rate_range', $teachingInfo?->hourly_rate_id ?? optional($teacher)->hourly_rate_id ?? null),
+            'monthly_rate_range' => $opt('monthly_rate_range', $teachingInfo?->monthly_rate_id ?? optional($teacher)->monthly_rate_id ?? null),
+            'experience_years' => $opt('teaching_experience_years', $teachingInfo?->teaching_experience_years ?? optional($teacher)->experience_years),
             'gender' => $opt('gender', $profile?->gender_id ?? null),
-            'highest_qualification' => $opt('highest_qualification', $profile?->highest_qualification ?? $teacher->highest_qualification_id ?? null),
+            'highest_qualification' => $opt('highest_qualification', $profile?->highest_qualification ?? optional($teacher)->highest_qualification_id ?? null),
         ];
     }
 

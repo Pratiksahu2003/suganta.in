@@ -56,17 +56,23 @@ class PublicTeacherController extends BaseApiController
 
         $teacherIds = $teachersPaginator->pluck('id')->all();
         $teachers = collect($teachersPaginator->items());
+        $usedFallback = false;
 
         if ($teachers->isEmpty()) {
-            $onlineTeachers = $this->getOnlineTeachersExcluding($teacherIds, 10);
+            $onlineTeachers = $this->getOnlineTeachersExcluding($teacherIds, $perPage);
             $teachers = $teachers->merge($onlineTeachers)->unique('id')->values();
+            $usedFallback = true;
         }
 
         $items = $teachers->map(fn (User $user) => $this->formatListItem($user));
 
+        $pagination = $usedFallback
+            ? $this->buildFallbackPagination($request, $perPage, $teachers->count())
+            : FilterOptionsHelper::paginationMeta($teachersPaginator);
+
         return $this->success('Teachers retrieved successfully.', [
             'teachers' => $items,
-            'pagination' => FilterOptionsHelper::paginationMeta($teachersPaginator),
+            'pagination' => $pagination,
         ]);
     }
 
@@ -81,7 +87,6 @@ class PublicTeacherController extends BaseApiController
             ->where('id', '!=', self::EXCLUDED_USER_ID)
             ->whereIn('registration_fee_status', ['paid', 'not_required'])
             ->where('id', $id)
-            ->where('is_active', true)
             ->first();
 
         if (!$user || !$user->profile) {
@@ -111,8 +116,28 @@ class PublicTeacherController extends BaseApiController
             ->where('role', 'teacher')
             ->whereNotNull('email_verified_at')
             ->where('users.id', '!=', self::EXCLUDED_USER_ID)
-            ->whereIn('registration_fee_status', ['paid', 'not_required'])
-            ->where('is_active', true);
+            ->whereIn('registration_fee_status', ['paid', 'not_required']);
+    }
+
+    /**
+     * Build pagination meta when fallback teachers are used (no filter matches).
+     * Matches structure of FilterOptionsHelper::paginationMeta for frontend consistency.
+     */
+    private function buildFallbackPagination(Request $request, int $perPage, int $total): array
+    {
+        $baseUrl = $request->url() . '?' . http_build_query($request->except('page') + ['page' => 1]);
+        return [
+            'current_page' => 1,
+            'per_page' => $perPage,
+            'total' => $total,
+            'last_page' => 1,
+            'from' => $total > 0 ? 1 : null,
+            'to' => $total,
+            'first_page_url' => $baseUrl,
+            'last_page_url' => $baseUrl,
+            'next_page_url' => null,
+            'prev_page_url' => null,
+        ];
     }
 
     private function applyFilters($query, Request $request): void
@@ -249,7 +274,6 @@ class PublicTeacherController extends BaseApiController
             ->whereNotNull('email_verified_at')
             ->where('users.id', '!=', self::EXCLUDED_USER_ID)
             ->whereIn('registration_fee_status', ['paid', 'not_required'])
-            ->where('is_active', true)
             ->whereNotIn('users.id', $excludeIds)
             ->whereExists(function ($q) {
                 $q->select(DB::raw(1))
@@ -276,9 +300,7 @@ class PublicTeacherController extends BaseApiController
             ->where('users.id', '!=', self::EXCLUDED_USER_ID)
             ->where('users.id', '!=', $profile->user_id)
             ->whereIn('registration_fee_status', ['paid', 'not_required'])
-            ->where('is_active', true);
-
-        $query->where(function ($q) use ($subjectIds, $city) {
+            ->where(function ($q) use ($subjectIds, $city) {
             if (!empty($subjectIds)) {
                 $q->whereHas('profile.teachingInfo', function ($tq) use ($subjectIds) {
                     $tq->where(function ($sub) use ($subjectIds) {
@@ -303,7 +325,6 @@ class PublicTeacherController extends BaseApiController
             return User::where('role', 'teacher')
                 ->whereNotNull('email_verified_at')
                 ->whereIn('registration_fee_status', ['paid', 'not_required'])
-                ->where('is_active', true)
                 ->join('profiles', 'users.id', '=', 'profiles.user_id')
                 ->whereNotNull('profiles.city')
                 ->where('profiles.city', '!=', '')
