@@ -66,17 +66,18 @@ Route::prefix('v1')->group(function (): void {
     Route::get('roles', [RoleController::class, 'index']);
     Route::get('subjects', [SubjectController::class, 'index']);
 
-    // Public Teacher List & Profile (no auth)
+    // Public Teacher (list, options, show by ID only — no auth)
     Route::prefix('teachers')->controller(PublicTeacherController::class)->group(function () {
         Route::get('options', 'options');
         Route::get('/', 'index');
-        Route::get('{idOrSlug}', 'show');
+        Route::get('{id}', 'show')->whereNumber('id');
     });
 
-    // Public Institute List & Profile (no auth)
+    // Public Institute (list, options, show by ID only — no auth)
     Route::prefix('institutes')->controller(PublicInstituteController::class)->group(function () {
+        Route::get('options', 'options');
         Route::get('/', 'index');
-        Route::get('{idOrSlug}', 'show');
+        Route::get('{id}', 'show')->whereNumber('id');
     });
 
     // Dashboard (auth only)

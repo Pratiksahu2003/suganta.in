@@ -482,6 +482,16 @@ class Institute extends Model
     }
 
     /**
+     * Scope for public listing (main institutes, active users).
+     */
+    public function scopeForPublicListing($query)
+    {
+        return $query
+            ->where(fn ($q) => $q->whereNull('parent_institute_id')->orWhere('institute_type', 'main'))
+            ->where(fn ($q) => $q->whereNull('user_id')->orWhereHas('user', fn ($uq) => $uq->where('is_active', true)));
+    }
+
+    /**
      * Scope to get only main institutes
      */
     public function scopeMainInstitutes($query)

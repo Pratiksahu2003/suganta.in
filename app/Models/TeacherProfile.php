@@ -492,6 +492,14 @@ class TeacherProfile extends Model
     }
 
     /**
+     * Scope for public listing (active users only).
+     */
+    public function scopeForPublicListing($query)
+    {
+        return $query->whereHas('user', fn ($q) => $q->where('is_active', true));
+    }
+
+    /**
      * Scope to filter by institute
      */
     public function scopeByInstitute($query, $instituteId)
