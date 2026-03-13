@@ -50,6 +50,14 @@ class DashboardController extends BaseApiController
             ->get()
             ->map(fn (Payment $p) => $this->formatPayment($p));
 
+        // Latest 5 leads for auth user (owned, assigned, or created)
+        $recentLeads = Lead::query()
+            ->forAuthUser($user->id)
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (Lead $l) => $this->formatLead($l));
+
         // 10 latest notifications for auth user
         $notifications = Notification::query()
             ->where('notifiable_type', User::class)
@@ -70,6 +78,7 @@ class DashboardController extends BaseApiController
                 'study_requirements' => $studyRequirementsCount,
             ],
             'recent_payments' => $recentPayments,
+            'recent_leads' => $recentLeads,
             'latest_notifications' => $notifications,
             'user' => $userInfo,
         ]);
@@ -90,6 +99,25 @@ class DashboardController extends BaseApiController
             'description' => $payment->meta['description'] ?? null,
             'created_at' => $payment->created_at->toIso8601String(),
             'processed_at' => $payment->processed_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Format lead for dashboard response.
+     */
+    protected function formatLead(Lead $lead): array
+    {
+        return [
+            'id' => $lead->id,
+            'lead_id' => $lead->lead_id,
+            'name' => $lead->name,
+            'email' => $lead->email,
+            'phone' => $lead->phone,
+            'type' => $lead->type,
+            'status' => $lead->status,
+            'priority' => $lead->priority,
+            'subject_interest' => $lead->subject_interest,
+            'created_at' => $lead->created_at->toIso8601String(),
         ];
     }
 
