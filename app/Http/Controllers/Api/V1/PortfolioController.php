@@ -169,7 +169,8 @@ class PortfolioController extends BaseApiController
             }
 
             if ($request->has('remove_images')) {
-                $removeImages = $request->input('remove_images', []);
+                $rawRemove = $request->input('remove_images', []);
+                $removeImages = $this->resolveRemovePaths($rawRemove, $imagePaths);
                 $this->deleteMultipleFiles($removeImages);
                 $imagePaths = array_values(array_diff($imagePaths, $removeImages));
             }
@@ -186,7 +187,8 @@ class PortfolioController extends BaseApiController
             }
 
             if ($request->has('remove_files')) {
-                $removeFiles = $request->input('remove_files', []);
+                $rawRemove = $request->input('remove_files', []);
+                $removeFiles = $this->resolveRemovePaths($rawRemove, $filePaths);
                 $this->deleteMultipleFiles($removeFiles);
                 $filePaths = array_values(array_diff($filePaths, $removeFiles));
             }

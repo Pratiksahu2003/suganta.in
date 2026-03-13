@@ -32,7 +32,7 @@ class UpdatePortfolioRequest extends FormRequest
                 'mimes:jpg,jpeg,png,gif,webp'
             ],
             'remove_images' => ['sometimes', 'array'],
-            'remove_images.*' => ['string'],
+            'remove_images.*' => ['required'], // Accept string paths or integer indices
             'files' => ['sometimes', 'array', 'max:10'],
             'files.*' => [
                 'required',
@@ -41,7 +41,7 @@ class UpdatePortfolioRequest extends FormRequest
                 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,zip,rar'
             ],
             'remove_files' => ['sometimes', 'array'],
-            'remove_files.*' => ['string'],
+            'remove_files.*' => ['required'], // Accept string paths or integer indices
             'category' => ['sometimes', 'nullable', 'string', 'max:500'],
             'tags' => ['sometimes', 'nullable', 'string', 'max:500'],
             'url' => ['sometimes', 'nullable', 'url', 'max:500'],

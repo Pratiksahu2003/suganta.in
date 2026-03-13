@@ -151,6 +151,27 @@ trait HandlesFileStorage
     }
 
     /**
+     * Resolve remove_images/remove_files input to actual file paths.
+     * Accepts both integer indices (0, 1, 2...) and string paths from Flutter/API clients.
+     *
+     * @param array $rawItems Array of indices (int) or paths (string)
+     * @param array $currentPaths Existing paths (for index resolution)
+     * @return array Unique paths to remove
+     */
+    protected function resolveRemovePaths(array $rawItems, array $currentPaths): array
+    {
+        $resolved = [];
+        foreach ($rawItems as $item) {
+            if (is_numeric($item) && isset($currentPaths[(int) $item])) {
+                $resolved[] = $currentPaths[(int) $item];
+            } else {
+                $resolved[] = (string) $item;
+            }
+        }
+        return array_values(array_unique(array_filter($resolved)));
+    }
+
+    /**
      * Get the full URL for a file.
      *
      * For GCS and other cloud disks, returns the project-domain URL so files are
