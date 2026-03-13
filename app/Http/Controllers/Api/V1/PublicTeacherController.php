@@ -359,6 +359,7 @@ class PublicTeacherController extends BaseApiController
             'hourly_rate' => $hourlyRate ? (float) $hourlyRate : null,
             'city' => $city,
             'state' => $state,
+            'location' => $this->formatLocation($profile),
             'teaching_mode' => $options['teaching_mode'],
             'availability_status' => $options['availability_status'],
             'subjects' => $subjects,
@@ -405,6 +406,7 @@ class PublicTeacherController extends BaseApiController
                 'gender' => $options['gender'],
                 'highest_qualification' => $options['highest_qualification'],
             ],
+            'location' => $this->formatLocation($profile),
             'teaching' => [
                 'qualification' => $teachingInfo?->qualification ?? $profile->highest_qualification,
                 'experience_years' => $options['experience_years'],
@@ -429,6 +431,40 @@ class PublicTeacherController extends BaseApiController
             'verified' => (bool) ($teachingInfo?->verified ?? false),
             'is_featured' => false,
             'reviews_sample' => $reviewsFormatted,
+        ];
+    }
+
+    /**
+     * Format location info per ProfileApi.md (Update Location).
+     *
+     * @return array{address_line_1: ?string, address_line_2: ?string, area: ?string, city: ?string, state: ?string, pincode: ?string, country_id: ?int, latitude: ?float, longitude: ?float}
+     */
+    private function formatLocation(?Profile $profile): array
+    {
+        if (!$profile) {
+            return [
+                'address_line_1' => null,
+                'address_line_2' => null,
+                'area' => null,
+                'city' => null,
+                'state' => null,
+                'pincode' => null,
+                'country_id' => null,
+                'latitude' => null,
+                'longitude' => null,
+            ];
+        }
+
+        return [
+            'address_line_1' => $profile->address_line_1,
+            'address_line_2' => $profile->address_line_2,
+            'area' => $profile->area,
+            'city' => $profile->city,
+            'state' => $profile->state,
+            'pincode' => $profile->pincode,
+            'country_id' => $profile->country_id ? (int) $profile->country_id : null,
+            'latitude' => $profile->latitude ? (float) $profile->latitude : null,
+            'longitude' => $profile->longitude ? (float) $profile->longitude : null,
         ];
     }
 

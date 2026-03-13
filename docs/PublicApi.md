@@ -81,6 +81,17 @@ Structure aligned with [ProfileApi.md](ProfileApi.md) for consistency.
         "hourly_rate": 500.00,
         "city": "Mumbai",
         "state": "Maharashtra",
+        "location": {
+          "address_line_1": "123 Main Street",
+          "address_line_2": "Apartment 4",
+          "area": "Andheri West",
+          "city": "Mumbai",
+          "state": "Maharashtra",
+          "pincode": "400058",
+          "country_id": 1,
+          "latitude": 19.1136,
+          "longitude": 72.8697
+        },
         "teaching_mode": { "id": 1, "label": "Online Only" },
         "availability_status": { "id": 1, "label": "Available" },
         "subjects": [{ "id": 1, "name": "Mathematics", "slug": "mathematics" }],
